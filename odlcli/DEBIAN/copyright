@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: odlcli
 Upstream-Contact: Lee Cowdrey <lee@cowdrey.co.uk>
-Source: https://cowdrey.co.uk/odlcli
+Source: https://github.com/leecowdrey/odlcli
 
 Files: *
 Copyright: 2020 Cowdrey Consulting UK Ltd. <contact@cowdrey.co.uk>

@@ -7,9 +7,9 @@ Architecture: all
 Essential: no
 Installed-Size: 92
 Maintainer: Lee Cowdrey <lee@cowdrey.co.uk>
-Homepage: <https://www.cowdrey.co.uk/>
+Homepage: <https://odlcli.cowdrey.co.uk/>
 Description: OpenDaylightController operational CLI interface
-Vcs-Git: https://cowdrey.co.uk/odlcli/lsccli.git
-Vcs-Browser: https://cowdrey.co.uk/odlcli/lsccli
+Vcs-Git: https://github.com/leecowdrey/odlcli.git
+Vcs-Browser: https://github.com/leecowdrey/odlcli
 Depends: curl, sed, grep, bc, openssl, jq, sshpass, openssh-client, bash-completion
 Pre-Depends: bash
