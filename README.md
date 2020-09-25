@@ -205,7 +205,7 @@ $
 #### PACKAGING/DISTRIBUTION
 - Upstream-Name: odlcli
 - Upstream-Contact: Lee Cowdrey <lee@cowdrey.co.uk>
-- Source: https://www.cowdrey.co.uk/odlcli
+- Source: https://github.com/leecowdrey/odlcli
 - Formats: dpkg & rpm
 
 #### INSTALLATION
