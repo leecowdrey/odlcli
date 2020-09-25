@@ -1,0 +1,15 @@
+Package: odlcli
+Source: unknown
+Version: 1.0.0
+Section: shells
+Priority: optional
+Architecture: all
+Essential: no
+Installed-Size: 92
+Maintainer: Lee Cowdrey <lee@cowdrey.co.uk>
+Homepage: <https://www.cowdrey.co.uk/>
+Description: OpenDaylightController operational CLI interface
+Vcs-Git: https://cowdrey.co.uk/odlcli/lsccli.git
+Vcs-Browser: https://cowdrey.co.uk/odlcli/lsccli
+Depends: curl, sed, grep, bc, openssl, jq, sshpass, openssh-client, bash-completion
+Pre-Depends: bash

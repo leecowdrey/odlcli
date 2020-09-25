@@ -1,0 +1,5 @@
+odlcli (1.0.0-0) UNRELEASED; urgency=low
+
+ * Initial release - LSC 12.1/OpenDaylight Sodium RFC8040 compatibility
+
+ -- Lee Cowdrey <lee@cowdrey.co.uk> Fri, 25 Sep 2020 15:00:00

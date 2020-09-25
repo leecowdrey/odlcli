@@ -1,0 +1,153 @@
+#!/bin/bash
+cli_name=${0##*/}
+CLI_VERSION="0.1.0"
+CLI_LIB="/usr/lib/${cli_name,,}"
+CLI_TMP="/tmp"
+CLI_INTERACTIVE=1
+RETVAL=0
+source ${CLI_LIB}/common
+
+clean_sigint() {
+  local RETVAL=0
+  if [ -f "${CLI_TMP}/${cli_name}.$$.????????" ] ; then
+    rm -f "${CLI_TMP}/${cli_name}.$$.????????" &>/dev/null
+  fi
+  exit ${RETVAL}
+}
+
+cli_exec() {
+  local RETVAL=0
+  local CLI_CMD=""
+  if [ -f "${CLI_LIB}/${1,,}" ] ; then
+    CLI_CMD="${1,,}"
+    shift
+    . ${CLI_LIB}/${CLI_CMD,,,} "${@}"
+    RETVAL=$?
+    if [ ${RETVAL} -gt 0 ] ; then
+      if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+        echo -e "Error [${TTY_RED}${RETVAL}${TTY_NORMAL}]"
+      else
+        echo "Error [${RETVAL}]"
+      fi
+    fi
+  else
+    if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+      echo -e "Invalid command \"${TTY_GREEN}${1}${TTY_NORMAL}\"; type '${TTY_BOLD}help${TTY_NORMAL}' for a list."
+    else
+      echo "Invalid command \"${1}\"; type 'help' for a list."
+    fi
+    RETVAL=1
+  fi
+  return ${RETVAL}
+}
+
+cli_interactive() {
+  local RETVAL=0
+  show_banner
+  echo -e "From shell (not here yet) use the '${TTY_BOLD}<tab>${TTY_NORMAL}' key for a list of available commands."
+  echo -e "Use '${TTY_BOLD}[cmd] help${TTY_NORMAL}' for a specific command, where '[${TTY_NORMAL}cmd${TTY_NORMAL}]' is the command name."
+  echo -e "Use '${TTY_BOLD}<Ctrl><d>${TTY_NORMAL}' or '${TTY_BOLD}quit${TTY_NORMAL}' to exit the CLI"
+  echo " "
+  while true ; do
+    local LINE=()
+    #read -e -a LINE -p $"${TTY_GREEN}${cli_name}${TTY_BLUE}>${TTY_NORMAL} "
+    read -e -a LINE -p $"[92m${cli_name}[94m>[0m "
+    if [ $? -gt 0 ] ; then
+      break
+    else
+      if [ -n "${LINE}" ] ; then
+        case "${LINE,,}" in
+         help|?) cli_help
+                 RETVAL=$?
+                 ;;
+         quit)   break
+                 ;;
+         *)      cli_exec ${LINE[@]}
+                 RETVAL=$?
+                 ;;
+        esac
+      fi
+    fi
+    unset LINE
+  done
+  echo " "
+  return ${RETVAL}
+}
+
+#[[ "$-" == *i* || -n "${PS1}" ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ "$-" == *i* || $(tty -s) -eq 0 ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ $- =~ i ]]  && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ -t 0 || -p /dev/stdin ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+[[ -t 0 && -t 1 ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ -t 0 && -p /dev/stdin && $- =~ i ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+
+if [ -f ~/.${cli_name,,} ] ; then
+ source ~/.${cli_name,,}
+else
+ cp ${CLI_LIB}/config.template ~/.${cli_name,,} && chmod 600 ~/.${cli_name,,}
+ DEFAULT_ODL_USER="admin"
+ DEFAULT_ODL_PASSWORD="admin"
+ DEFAULT_ODL_HOST="127.0.0.1"
+ DEFAULT_ODL_PORT="8181"
+ DEFAULT_JOLOKIA_USER="admin"
+ DEFAULT_JOLOKIA_PASSWORD="admin"
+ ODL_USER="${DEFAULT_ODL_USER}"
+ ODL_PASSWORD="${DEFAULT_ODL_PASSWORD}"
+ ODL_HOST="${DEFAULT_ODL_HOST}"
+ ODL_PORT="${DEFAULT_ODL_PORT}"
+ JOLOKIA_USER="${DEFAULT_JOLOKIA_USER}"
+ JOLOKIA_PASSWORD="${DEFAULT_JOLOKIA_PASSWORD}"
+ if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+   echo "${cli_name} - first time use, please enter SDNc RESTCONF API details:"
+   read -e -p "username [${DEFAULT_ODL_USER}] ? " ODL_USER
+   read -e -p "password [${DEFAULT_ODL_PASSWORD}] ? " ODL_PASSWORD
+   read -e -p "host [${DEFAULT_ODL_HOST}] ? " ODL_HOST
+   read -e -p "port [${DEFAULT_ODL_PORT}] ? " ODL_PORT
+   read -e -p "Jolokia username [${DEFAULT_JOLOKIA_USER}] ? " JOLOKIA_USER
+   read -e -p "Jolokia password [${DEFAULT_JOLOKIA_PASSWORD}] ? " JOLOKIA_PASSWORD
+   OPENSSL_VERSION=$(openssl version)
+   OPENSSL_VERSION=${OPENSSL_VERSION//[[:blank:]]/}
+   ODL_USER="${ODL_USER:-$DEFAULT_ODL_USER}"
+   ODL_PASSWORD="${ODL_PASSWORD:-$DEFAULT_ODL_PASSWORD}"
+   ODL_HOST="${ODL_HOST:-$DEFAULT_ODL_HOST}"
+   ODL_PORT="${ODL_PORT:-$DEFAULT_ODL_PORT}"
+   JOLOKIA_USER="${JOLOKIA_USER:-$DEFAULT_JOLOKIA_USER}"
+   JOLOKIA_PASSWORD="${JOLOKIA_PASSWORD:-$DEFAULT_JOLOKIA_PASSWORD}"
+ fi
+ echo "${cli_name} - updating environment"
+ #
+ set_machine_id
+ set_config OPENSSL_VERSION "${OPENSSL_VERSION//[[:blank:]]/}"
+ set_config ODL_USER "${ODL_USER}"
+ set_password "${ODL_PASSWORD}"
+ set_config ODL_HOST "${ODL_HOST}"
+ set_config ODL_PORT "${ODL_PORT}"
+ set_config JOLOKIA_USER "${JOLOKIA_USER}"
+ set_jolokia_password "${JOLOKIA_PASSWORD}"
+ #
+ source ~/.${cli_name,,}
+ echo "${cli_name} - ready"
+ echo " "
+fi
+
+trap clean_sigint INT
+
+if [ ${CLI_INTERACTIVE} -eq 1 ] && [ $# -eq 0 ] ; then
+  cli_help
+  RETVAL=$?
+elif [ ${CLI_INTERACTIVE} -eq 0 ] && [ $# -eq 0 ] ; then
+  cli_interactive
+  RETVAL=$?
+elif [ ${CLI_INTERACTIVE} -eq 1 ] && [ $# -gt 0 ] ; then
+  cli_exec "${@}"
+  RETVAL=$?
+elif [ ${CLI_INTERACTIVE} -eq 0 ] && [ $# -gt 0 ] ; then
+  cli_exec "${@}"
+  RETVAL=$?
+else
+  RETVAL=1
+fi
+
+trap - INT
+
+exit ${RETVAL}
