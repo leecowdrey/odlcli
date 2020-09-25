@@ -84,50 +84,58 @@ cli_interactive() {
 if [ -f ~/.${cli_name,,} ] ; then
  source ~/.${cli_name,,}
 else
- cp ${CLI_LIB}/config.template ~/.${cli_name,,} && chmod 600 ~/.${cli_name,,}
- DEFAULT_ODL_USER="admin"
- DEFAULT_ODL_PASSWORD="admin"
- DEFAULT_ODL_HOST="127.0.0.1"
- DEFAULT_ODL_PORT="8181"
- DEFAULT_JOLOKIA_USER="admin"
- DEFAULT_JOLOKIA_PASSWORD="admin"
- ODL_USER="${DEFAULT_ODL_USER}"
- ODL_PASSWORD="${DEFAULT_ODL_PASSWORD}"
- ODL_HOST="${DEFAULT_ODL_HOST}"
- ODL_PORT="${DEFAULT_ODL_PORT}"
- JOLOKIA_USER="${DEFAULT_JOLOKIA_USER}"
- JOLOKIA_PASSWORD="${DEFAULT_JOLOKIA_PASSWORD}"
- if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
-   echo "${cli_name} - first time use, please enter SDNc RESTCONF API details:"
-   read -e -p "username [${DEFAULT_ODL_USER}] ? " ODL_USER
-   read -e -p "password [${DEFAULT_ODL_PASSWORD}] ? " ODL_PASSWORD
-   read -e -p "host [${DEFAULT_ODL_HOST}] ? " ODL_HOST
-   read -e -p "port [${DEFAULT_ODL_PORT}] ? " ODL_PORT
-   read -e -p "Jolokia username [${DEFAULT_JOLOKIA_USER}] ? " JOLOKIA_USER
-   read -e -p "Jolokia password [${DEFAULT_JOLOKIA_PASSWORD}] ? " JOLOKIA_PASSWORD
-   OPENSSL_VERSION=$(openssl version)
-   OPENSSL_VERSION=${OPENSSL_VERSION//[[:blank:]]/}
-   ODL_USER="${ODL_USER:-$DEFAULT_ODL_USER}"
-   ODL_PASSWORD="${ODL_PASSWORD:-$DEFAULT_ODL_PASSWORD}"
-   ODL_HOST="${ODL_HOST:-$DEFAULT_ODL_HOST}"
-   ODL_PORT="${ODL_PORT:-$DEFAULT_ODL_PORT}"
-   JOLOKIA_USER="${JOLOKIA_USER:-$DEFAULT_JOLOKIA_USER}"
-   JOLOKIA_PASSWORD="${JOLOKIA_PASSWORD:-$DEFAULT_JOLOKIA_PASSWORD}"
+ if [ -f ~/.lsccli ] ; then
+   echo "${cli_name} - migrating from lsccli"
+   cp ~/.lsccli ~/.${cli_name,,} && chmod 600 ~/.${cli_name,,}
+   source ~/.${cli_name,,}
+   echo "${cli_name} - ready"
+   echo " "
+ else
+   cp ${CLI_LIB}/config.template ~/.${cli_name,,} && chmod 600 ~/.${cli_name,,}
+   DEFAULT_ODL_USER="admin"
+   DEFAULT_ODL_PASSWORD="admin"
+   DEFAULT_ODL_HOST="127.0.0.1"
+   DEFAULT_ODL_PORT="8181"
+   DEFAULT_JOLOKIA_USER="admin"
+   DEFAULT_JOLOKIA_PASSWORD="admin"
+   ODL_USER="${DEFAULT_ODL_USER}"
+   ODL_PASSWORD="${DEFAULT_ODL_PASSWORD}"
+   ODL_HOST="${DEFAULT_ODL_HOST}"
+   ODL_PORT="${DEFAULT_ODL_PORT}"
+   JOLOKIA_USER="${DEFAULT_JOLOKIA_USER}"
+   JOLOKIA_PASSWORD="${DEFAULT_JOLOKIA_PASSWORD}"
+   if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+     echo "${cli_name} - first time use, please enter SDNc RESTCONF API details:"
+     read -e -p "username [${DEFAULT_ODL_USER}] ? " ODL_USER
+     read -e -p "password [${DEFAULT_ODL_PASSWORD}] ? " ODL_PASSWORD
+     read -e -p "host [${DEFAULT_ODL_HOST}] ? " ODL_HOST
+     read -e -p "port [${DEFAULT_ODL_PORT}] ? " ODL_PORT
+     read -e -p "Jolokia username [${DEFAULT_JOLOKIA_USER}] ? " JOLOKIA_USER
+     read -e -p "Jolokia password [${DEFAULT_JOLOKIA_PASSWORD}] ? " JOLOKIA_PASSWORD
+     OPENSSL_VERSION=$(openssl version)
+     OPENSSL_VERSION=${OPENSSL_VERSION//[[:blank:]]/}
+     ODL_USER="${ODL_USER:-$DEFAULT_ODL_USER}"
+     ODL_PASSWORD="${ODL_PASSWORD:-$DEFAULT_ODL_PASSWORD}"
+     ODL_HOST="${ODL_HOST:-$DEFAULT_ODL_HOST}"
+     ODL_PORT="${ODL_PORT:-$DEFAULT_ODL_PORT}"
+     JOLOKIA_USER="${JOLOKIA_USER:-$DEFAULT_JOLOKIA_USER}"
+     JOLOKIA_PASSWORD="${JOLOKIA_PASSWORD:-$DEFAULT_JOLOKIA_PASSWORD}"
+   fi
+   echo "${cli_name} - updating environment"
+   #
+   set_machine_id
+   set_config OPENSSL_VERSION "${OPENSSL_VERSION//[[:blank:]]/}"
+   set_config ODL_USER "${ODL_USER}"
+   set_password "${ODL_PASSWORD}"
+   set_config ODL_HOST "${ODL_HOST}"
+   set_config ODL_PORT "${ODL_PORT}"
+   set_config JOLOKIA_USER "${JOLOKIA_USER}"
+   set_jolokia_password "${JOLOKIA_PASSWORD}"
+   #
+   source ~/.${cli_name,,}
+   echo "${cli_name} - ready"
+   echo " "
  fi
- echo "${cli_name} - updating environment"
- #
- set_machine_id
- set_config OPENSSL_VERSION "${OPENSSL_VERSION//[[:blank:]]/}"
- set_config ODL_USER "${ODL_USER}"
- set_password "${ODL_PASSWORD}"
- set_config ODL_HOST "${ODL_HOST}"
- set_config ODL_PORT "${ODL_PORT}"
- set_config JOLOKIA_USER "${JOLOKIA_USER}"
- set_jolokia_password "${JOLOKIA_PASSWORD}"
- #
- source ~/.${cli_name,,}
- echo "${cli_name} - ready"
- echo " "
 fi
 
 trap clean_sigint INT
