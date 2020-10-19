@@ -149,6 +149,7 @@ $
                [ --encrypt                     ] encrypt exported passwords
             list                                 List known nodes
             status                               List connection status of known nodes
+                [ --summary                    ] List number of nodes connected, connecting, unable-to-connect in summary form
             state <<node-id>> | --all            ONF control-construct operational state
                 [  --yang-model <<model>>      ] YANG model, defaults to core-model-1-4
                 [  --exclude <<node-id>>       ] Exclude specified node, repeat as necessary
