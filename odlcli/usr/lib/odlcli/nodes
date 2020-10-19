@@ -151,7 +151,7 @@ nodes_state() {
    local HTTP_METHOD="GET"
    local HTTP_CONTENT_TYPE="application/yang-data+json"
    local HTTP_ACCEPT="application/yang-data+json"
-   mk_tmp_file HTTP_RESPONSE 
+   mk_tmp_file HTTP_RESPONSE
    http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
    if [ ${CURL_RETVAL} -eq 0 ] ; then
      if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
@@ -434,6 +434,23 @@ nodes_status() {
  local HTTP_CONTENT_TYPE="application/yang-data+json"
  local HTTP_ACCEPT="application/json"
  local NODES=0
+ local SUMMARY=1
+ local SUMMARY_CONNECTED=0
+ local SUMMARY_UNABLE_TO_CONNECT=0
+ local SUMMARY_CONNECTING=0
+ local SUMMARY_UNKNOWN=0
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --summary)
+              SUMMARY=0
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ fi
  mk_tmp_file HTTP_RESPONSE
  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
  if [ ${CURL_RETVAL} -eq 0 ] ; then
@@ -446,23 +463,49 @@ nodes_status() {
           while [ ${NODE} -lt ${NODES} ] ; do
            local NODEID=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"node-id\"" ${HTTP_RESPONSE})
            local CONNECTION_STATUS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:connection-status\"" ${HTTP_RESPONSE})
-           if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
-             case "${CONNECTION_STATUS,,}" in
-               connected)         echo -e "${NODEID}|${TTY_GREEN}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                  ;;
-               connecting)        echo -e "${NODEID}|${TTY_AMBER}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                  ;;
-               unable-to-connect) echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                  ;;
-               *)                 echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                  ;;
-             esac
+           if [ ${SUMMARY} -eq 0 ] ; then
+               case "${CONNECTION_STATUS,,}" in
+                 connected)         ((SUMMARY_CONNECTED=SUMMARY_CONNECTED+1))
+                                    ;;
+                 connecting)        ((SUMMARY_CONNECTING=SUMMARY_CONNECTING+1))
+                                    ;;
+                 unable-to-connect) ((SUMMARY_UNABLE_TO_CONNECT=SUMMARY_UNABLE_TO_CONNECT+1))
+                                    ;;
+                 *)                 ((SUMMARY_UNKNOWN=SUMMARY_UNKNOWN+1))
+                                    ;;
+           
            else
-             echo "${NODEID}|${CONNECTION_STATUS}"
+             if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+               case "${CONNECTION_STATUS,,}" in
+                 connected)         echo -e "${NODEID}|${TTY_GREEN}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+                 connecting)        echo -e "${NODEID}|${TTY_AMBER}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+                 unable-to-connect) echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+                 *)                 echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               esac
+             else
+               echo "${NODEID}|${CONNECTION_STATUS}"
+             fi
            fi
            ((NODE=NODE+1))
           done
         fi
+      fi
+      if [ ${SUMMARY} -eq 0 ] ; then
+       if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+         echo -e "connected|${TTY_GREEN}${SUMMARY_CONNECTED}${TTY_NORMAL}"
+         echo -e "connecting|${TTY_AMBER}${SUMMARY_CONNECTING}${TTY_NORMAL}"
+         echo -e "unable-to-connect|${TTY_RED}${SUMMARY_UNABLE_TO_CONNECT}${TTY_NORMAL}"
+         echo -e "unknown|${TTY_RED}${SUMMARY_UNKNOWN}${TTY_NORMAL}"
+       else
+         echo "connected|${SUMMARY_CONNECTED}"
+         echo "connecting|${SUMMARY_CONNECTING}"
+         echo "unable-to-connect|${SUMMARY_UNABLE_TO_CONNECT}"
+         echo "unknown|${SUMMARY_UNKNOWN}"
+       fi
       fi
    else
     RETVAL=${CURL_RETVAL}
@@ -487,7 +530,7 @@ nodes_unmount() {
  local OPTION="${1}"
  while [ $# -gt 0 ] ; do
   case "${OPTION}" in
-   --all|-a) 
+   --all|-a)
             unset LIST_OF_NODES
             get_nodes
             if [ $? -eq 0 ] ; then
@@ -501,7 +544,7 @@ nodes_unmount() {
             fi
             return ${RETVAL}
             ;;
-   *)        
+   *)
             NODE_ID="${1}"
             ;;
   esac
@@ -627,7 +670,7 @@ node_mount() {
      "netconf-node-topology:schema-cache-directory": "${NODE_CACHE_DIR}",
      "netconf-node-topology:concurrent-rpc-limit": ${NODE_RPC_LIMIT},
      "netconf-node-topology:max-connection-attempts": ${NODE_MAX_ATTEMPTS},
-     "reconnect-on-changed-schema": ${NODE_RECONNECT_ON_CHANGED_SCHEMA} 
+     "reconnect-on-changed-schema": ${NODE_RECONNECT_ON_CHANGED_SCHEMA}
     }
  ]
 }
@@ -660,7 +703,7 @@ nodes_unmount() {
  local OPTION="${1}"
  while [ $# -gt 0 ] ; do
   case "${OPTION}" in
-   --all|-a) 
+   --all|-a)
             unset LIST_OF_NODES
             get_nodes
             if [ $? -eq 0 ] ; then
@@ -674,7 +717,7 @@ nodes_unmount() {
             fi
             return ${RETVAL}
             ;;
-   *)        
+   *)
             NODE_ID="${1}"
             ;;
   esac
@@ -731,10 +774,10 @@ nodes_test() {
             [[ ${1} -gt 0 ]] && ODL_TIMEOUT=${1}
           fi
           ;;
-   --all) 
+   --all)
           NODE_ALL=0
           ;;
-   *)        
+   *)
           NODE_ID="${1}"
           ;;
   esac
