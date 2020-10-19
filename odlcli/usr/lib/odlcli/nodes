@@ -457,7 +457,9 @@ nodes_status() {
    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
       if [ -f "${HTTP_RESPONSE}" ] ; then
         NODES=$(jq -r ".\"network-topology:topology\"[0].node | length" ${HTTP_RESPONSE})
-        echo "[]node-id|connection-status"
+        if [ ${SUMMARY} -gt 0 ] ; then
+          echo "[]node-id|connection-status"
+        fi
         if [ ${NODES} -gt 0 ] ; then
           local NODE=0
           while [ ${NODE} -lt ${NODES} ] ; do
@@ -473,7 +475,7 @@ nodes_status() {
                                     ;;
                  *)                 ((SUMMARY_UNKNOWN=SUMMARY_UNKNOWN+1))
                                     ;;
-           
+               esac
            else
              if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
                case "${CONNECTION_STATUS,,}" in
