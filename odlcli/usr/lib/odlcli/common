@@ -417,6 +417,7 @@ nodes_help_list() {
   echo "   export                                Exported listed nodes"
   echo "        [ --encrypt                    ] encrypt passwords"
   echo "   list                                  List known nodes"
+  echo "        [ --summary                    ] List number of nodes connected, connting, unable-to-connect in summary form"
   echo "   status                                List connection status of known nodes"
   echo "   state  <<node-id>> | --all            ONF control-construct operational state"
   echo "       [  --yang-model <<model>>       ] YANG model, defaults to core-model-1-4"

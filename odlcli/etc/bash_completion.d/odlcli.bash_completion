@@ -34,6 +34,7 @@ _complete_odlcli () {
   cmds_nodes_mount="--host --username --password --encrypted-password --port --tcp-only --cache --cschema --timeout"
   cmds_nodes_unmount="--all"
   cmds_nodes_state="--yang-module --extended --timeout --all"
+  cmds_nodes_status="--summary"
   cmds_nodes_test="--capabilities --exclude --timeout --all"
   cmds_nodes_status=""
   cmds_set="help pass host port timeout maxtime user protocol juser jpass"
