@@ -458,7 +458,7 @@ nodes_status() {
                                   ;;
              esac
            else
-             echo "[${NODE}]${NODEID}|${CONNECTION_STATUS}"
+             echo "${NODEID}|${CONNECTION_STATUS}"
            fi
            ((NODE=NODE+1))
           done
