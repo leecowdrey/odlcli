@@ -86,7 +86,7 @@ $
        • about - Copyright/version and contact information
 #### DELETE
        • delete [parameter] - Remove [odlcli] environment parameters
-            user/pass/protocol/host/port/timeout/maxtime can not be deleted
+            user/pass/protocol/host/port/prefix/timeout/maxtime can not be deleted
             <<name>>         Delete custom parameter
 #### QUERY
        • query [method] [path] - RESTCONF generic query
@@ -114,6 +114,7 @@ $
             protocol  Set RESTCONF API protocol
             host      Set RESTCONF API host
             port      Set RESTCONF API port number
+            prefix    Set RESTCONF API path prefix
             timeout   Set RESTCONF API connection timeout (seconds)
             maxtime   Set RESTCONF API max wait timeout (seconds)
             <<name>>  Set custom parameter
@@ -126,6 +127,7 @@ $
             protocol    Show RESTCONF API protocol
             host        Show RESTCONF API host
             port        Show RESTCONF API port number
+            prefix      Show RESTCONF API path prefix
             timeout     Show RESTCONF API connection timeout (seconds)
             maxtime     Show RESTCONF API max wait timeout (seconds)
             juser       Show Jolokia username
@@ -149,7 +151,6 @@ $
                [ --encrypt                     ] encrypt exported passwords
             list                                 List known nodes
             status                               List connection status of known nodes
-                [ --summary                    ] List number of nodes connected, connecting, unable-to-connect in summary form
             state <<node-id>> | --all            ONF control-construct operational state
                 [  --yang-model <<model>>      ] YANG model, defaults to core-model-1-4
                 [  --exclude <<node-id>>       ] Exclude specified node, repeat as necessary
@@ -206,7 +207,7 @@ $
 #### PACKAGING/DISTRIBUTION
 - Upstream-Name: odlcli
 - Upstream-Contact: Lee Cowdrey <lee@cowdrey.co.uk>
-- Source: https://github.com/leecowdrey/odlcli
+- Source: https://www.cowdrey.co.uk/odlcli
 - Formats: dpkg & rpm
 
 #### INSTALLATION
