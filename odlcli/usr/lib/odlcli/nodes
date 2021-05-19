@@ -6,7 +6,7 @@ get_nodes() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id)"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id)"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"
@@ -73,7 +73,7 @@ nodes_test_aaa() {
  fi
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="*/*"
@@ -146,12 +146,12 @@ nodes_state() {
     RETVAL=1
     return ${RETVAL}
    fi
-   local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf/node=${1}/yang-ext:mount/${2}:control-construct?content=nonconfig&fields=logical-termination-point(uuid;layer-protocol(local-id;layer-protocol-name))"
+   local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/node=${1}/yang-ext:mount/${2}:control-construct?content=nonconfig&fields=logical-termination-point(uuid;layer-protocol(local-id;layer-protocol-name))"
    local HTTP_BODY="/dev/null"
    local HTTP_METHOD="GET"
    local HTTP_CONTENT_TYPE="application/yang-data+json"
    local HTTP_ACCEPT="application/yang-data+json"
-   mk_tmp_file HTTP_RESPONSE
+   mk_tmp_file HTTP_RESPONSE 
    http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
    if [ ${CURL_RETVAL} -eq 0 ] ; then
      if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
@@ -261,7 +261,7 @@ nodes_state() {
    [[ ${RECURSIVE} -eq 1 ]] && echo "[]node-id|${YANG_MODEL}:operational-state|LTP-status|LTP-size"
    local HTTP_CODE=""
    local HTTP_RESPONSE=""
-   local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/${YANG_MODEL}:control-construct/operational-state"
+   local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/${YANG_MODEL}:control-construct/operational-state"
    local HTTP_BODY="/dev/null"
    local HTTP_METHOD="GET"
    local HTTP_CONTENT_TYPE="application/yang-data+json"
@@ -339,7 +339,7 @@ export_nodes() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf?content=config"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf?content=config"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"
@@ -428,86 +428,41 @@ nodes_status() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id;netconf-node-topology:connection-status)"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id;netconf-node-topology:connection-status)"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"
  local HTTP_ACCEPT="application/json"
  local NODES=0
- local SUMMARY=1
- local SUMMARY_CONNECTED=0
- local SUMMARY_UNABLE_TO_CONNECT=0
- local SUMMARY_CONNECTING=0
- local SUMMARY_UNKNOWN=0
- if [ $# -gt 0 ] ; then
-   local OPTION="${1}"
-   while [ $# -gt 0 ] ; do
-    case "${OPTION,,}" in
-      --summary)
-              SUMMARY=0
-              ;;
-    esac
-    shift
-    OPTION=$1
-   done
- fi
  mk_tmp_file HTTP_RESPONSE
  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
  if [ ${CURL_RETVAL} -eq 0 ] ; then
    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
       if [ -f "${HTTP_RESPONSE}" ] ; then
         NODES=$(jq -r ".\"network-topology:topology\"[0].node | length" ${HTTP_RESPONSE})
-        if [ ${SUMMARY} -gt 0 ] ; then
-          echo "[]node-id|connection-status"
-        fi
+        echo "[]node-id|connection-status"
         if [ ${NODES} -gt 0 ] ; then
           local NODE=0
           while [ ${NODE} -lt ${NODES} ] ; do
            local NODEID=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"node-id\"" ${HTTP_RESPONSE})
            local CONNECTION_STATUS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:connection-status\"" ${HTTP_RESPONSE})
-           if [ ${SUMMARY} -eq 0 ] ; then
-               case "${CONNECTION_STATUS,,}" in
-                 connected)         ((SUMMARY_CONNECTED=SUMMARY_CONNECTED+1))
-                                    ;;
-                 connecting)        ((SUMMARY_CONNECTING=SUMMARY_CONNECTING+1))
-                                    ;;
-                 unable-to-connect) ((SUMMARY_UNABLE_TO_CONNECT=SUMMARY_UNABLE_TO_CONNECT+1))
-                                    ;;
-                 *)                 ((SUMMARY_UNKNOWN=SUMMARY_UNKNOWN+1))
-                                    ;;
-               esac
+           if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+             case "${CONNECTION_STATUS,,}" in
+               connected)         echo -e "${NODEID}|${TTY_GREEN}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                  ;;
+               connecting)        echo -e "${NODEID}|${TTY_AMBER}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                  ;;
+               unable-to-connect) echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                  ;;
+               *)                 echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                  ;;
+             esac
            else
-             if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
-               case "${CONNECTION_STATUS,,}" in
-                 connected)         echo -e "${NODEID}|${TTY_GREEN}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                    ;;
-                 connecting)        echo -e "${NODEID}|${TTY_AMBER}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                    ;;
-                 unable-to-connect) echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                    ;;
-                 *)                 echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
-                                    ;;
-               esac
-             else
-               echo "${NODEID}|${CONNECTION_STATUS}"
-             fi
+             echo "[${NODE}]${NODEID}|${CONNECTION_STATUS}"
            fi
            ((NODE=NODE+1))
           done
         fi
-      fi
-      if [ ${SUMMARY} -eq 0 ] ; then
-       if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
-         echo -e "connected|${TTY_GREEN}${SUMMARY_CONNECTED}${TTY_NORMAL}"
-         echo -e "connecting|${TTY_AMBER}${SUMMARY_CONNECTING}${TTY_NORMAL}"
-         echo -e "unable-to-connect|${TTY_RED}${SUMMARY_UNABLE_TO_CONNECT}${TTY_NORMAL}"
-         echo -e "unknown|${TTY_RED}${SUMMARY_UNKNOWN}${TTY_NORMAL}"
-       else
-         echo "connected|${SUMMARY_CONNECTED}"
-         echo "connecting|${SUMMARY_CONNECTING}"
-         echo "unable-to-connect|${SUMMARY_UNABLE_TO_CONNECT}"
-         echo "unknown|${SUMMARY_UNKNOWN}"
-       fi
       fi
    else
     RETVAL=${CURL_RETVAL}
@@ -532,7 +487,7 @@ nodes_unmount() {
  local OPTION="${1}"
  while [ $# -gt 0 ] ; do
   case "${OPTION}" in
-   --all|-a)
+   --all|-a) 
             unset LIST_OF_NODES
             get_nodes
             if [ $? -eq 0 ] ; then
@@ -546,14 +501,14 @@ nodes_unmount() {
             fi
             return ${RETVAL}
             ;;
-   *)
+   *)        
             NODE_ID="${1}"
             ;;
   esac
   shift
   OPTION=$1
  done
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="DELETE"
  local HTTP_CONTENT_TYPE="appliation/yang-data+json"
@@ -579,7 +534,7 @@ node_mount() {
  fi
  local HTTP_CODE=""
  local HTTP_RESPONSE="/dev/null"
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf/node=${1}"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/node=${1}"
  local HTTP_METHOD="PUT"
  local HTTP_CONTENT_TYPE="application/yang-data+json"
  local HTTP_ACCEPT="applicaiton/yang-data+json"
@@ -672,7 +627,7 @@ node_mount() {
      "netconf-node-topology:schema-cache-directory": "${NODE_CACHE_DIR}",
      "netconf-node-topology:concurrent-rpc-limit": ${NODE_RPC_LIMIT},
      "netconf-node-topology:max-connection-attempts": ${NODE_MAX_ATTEMPTS},
-     "reconnect-on-changed-schema": ${NODE_RECONNECT_ON_CHANGED_SCHEMA}
+     "reconnect-on-changed-schema": ${NODE_RECONNECT_ON_CHANGED_SCHEMA} 
     }
  ]
 }
@@ -705,7 +660,7 @@ nodes_unmount() {
  local OPTION="${1}"
  while [ $# -gt 0 ] ; do
   case "${OPTION}" in
-   --all|-a)
+   --all|-a) 
             unset LIST_OF_NODES
             get_nodes
             if [ $? -eq 0 ] ; then
@@ -719,14 +674,14 @@ nodes_unmount() {
             fi
             return ${RETVAL}
             ;;
-   *)
+   *)        
             NODE_ID="${1}"
             ;;
   esac
   shift
   OPTION=$1
  done
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="DELETE"
  local HTTP_CONTENT_TYPE="appliation/yang-data+json"
@@ -776,10 +731,10 @@ nodes_test() {
             [[ ${1} -gt 0 ]] && ODL_TIMEOUT=${1}
           fi
           ;;
-   --all)
+   --all) 
           NODE_ALL=0
           ;;
-   *)
+   *)        
           NODE_ID="${1}"
           ;;
   esac
@@ -811,7 +766,7 @@ nodes_test() {
 
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/network-topology:network-topology/topology=topology-netconf?content=config"
+ local HTTP_PATH="${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf?content=config"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"

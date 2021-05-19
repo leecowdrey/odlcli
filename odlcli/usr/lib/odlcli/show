@@ -5,7 +5,7 @@ restconf_capabilities() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/ietf-restconf-monitoring:restconf-state/capabilities"
+ local HTTP_PATH="${ODL_PREFIX}/data/ietf-restconf-monitoring:restconf-state/capabilities"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/json"
@@ -62,7 +62,7 @@ else
     show_config "JOLOKIA_USER" "${@}"
     RETVAL=$?
     ;;
-  host|port|timeout|maxtime|user|pass|password|protocol)
+  host|port|prefix|timeout|maxtime|user|pass|password|protocol)
     PARAM="${1}"
     shift
     show_config "ODL_${PARAM}" "${@}"

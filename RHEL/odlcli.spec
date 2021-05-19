@@ -1,5 +1,5 @@
 Name:           odlcli
-Version:        0.1.0
+Version:        1.0.4
 Release:        1%{?dist}
 Summary:        OpenDaylight SDN Controller operational CLI interface
 
@@ -72,5 +72,7 @@ install -m 0444 ./%{name}%{_sysconfdir}/bash_completion.d/%{name}.bash_completio
 %{_sysconfdir}/bash_completion.d/%{name}.bash_completion
 
 %changelog
-*  Fri Sep 25 2020 Lee Cowdrey <lee@cowdrey.net 0.1.0
+*  Fri Sep 25 2020 Lee Cowdrey <lee@cowdrey.net> 1.0.0
 - initial RHEL packaging release
+*  Sun May 16 2021 Lee Cowdrey <lee@cowdrey.net> 1.0.2
+- adjustable RESTCONF path prefix

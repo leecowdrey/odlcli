@@ -164,7 +164,7 @@ list_nodecounter() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/lumina-node-counter:node-counts"
+ local HTTP_PATH="${ODL_PREFIX}/data/lumina-node-counter:node-counts"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/json"

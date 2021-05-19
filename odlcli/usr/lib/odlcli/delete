@@ -10,7 +10,7 @@ else
     delete_help_list
     RETVAL=0
     ;;
-  machine_id|password|host|port|timeout|maxtime|user|protocol)
+  machine_id|password|host|prefix|port|timeout|maxtime|user|protocol)
     RETVAL=1
     ;;
   *)

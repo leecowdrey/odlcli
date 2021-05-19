@@ -1,6 +1,6 @@
 .\" Manpage for odlcli
 .\" Contact lee@cowdrey.co.uk to correct errors or typos.
-.TH man 8 "25 Sep 2020" "1.0.0" "odlcli man page"
+.TH man 8 "16 May 2021" "1.0.3" "odlcli man page"
 .SH NAME
 odlcli\- OpenDaylight SDN Controller operational CLI interface
 .SH SYNOPSIS
@@ -96,6 +96,7 @@ set [parameter] [value] - Adjust [odlcli] environment parameters
    protocol  Set RESTCONF API protocol
    host      Set RESTCONF API host
    port      Set RESTCONF API port number
+   prefix    Set RESTCONF API path prefix 
    timeout   Set RESTCONF API connection timeout (seconds)
    maxtime   Set RESTCONF API max wait timeout (seconds)
    <<name>>  Set custom parameter
@@ -108,6 +109,7 @@ show [parameter] | --all - View [odlcli] environment parameters and additional c
    protocol    Show RESTCONF API protocol
    host        Show RESTCONF API host
    port        Show RESTCONF API port number
+   prefix      Show RESTCONF API path prefix
    timeout     Show RESTCONF API connection timeout (seconds)
    maxtime     Show RESTCONF API max wait timeout (seconds)
    juser       Show Jolokia username
@@ -131,7 +133,6 @@ nodes - Manage NETCONF nodes (network devices) connected to the SDNc
       [ --encrypt                     ] encrypt exported passwords
    list                                 List known nodes
    status                               List connection status of known nodes
-       [ --summary                    ] List number of nodes connected, connecting, unable-to-connect in summary form
    state <<node-id>> | --all            ONF control-construct operational state
        [  --yang-model <<model>>      ] YANG model, defaults to core-model-1-4
        [  --exclude <<node-id>>       ] Exclude specified node, repeat as necessary

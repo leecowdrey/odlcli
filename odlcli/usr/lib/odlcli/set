@@ -26,7 +26,7 @@ else
     set_config "JOLOKIA_USER" "${1}"
     RETVAL=$?
     ;;
-  host|port|timeout|maxtime|user|username|protocol)
+  host|port|prefix|timeout|maxtime|user|username|protocol)
     PARAM="${1}"
     shift
     set_config "ODL_${PARAM}" "${@}"

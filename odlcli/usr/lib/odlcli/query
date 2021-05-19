@@ -11,7 +11,7 @@ restconf_get() {
    return ${RETVAL}
  fi
  local HTTP_PATH=""
- [[ "${1}" =~ "/rests/data/" ]] && HTTP_PATH="${1}" || HTTP_PATH="/rests/data${1}"
+ [[ "${1}" =~ "${ODL_PREFIX}/data/" ]] && HTTP_PATH="${1}" || HTTP_PATH="${ODL_PREFIX}/data${1}"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="*/*"

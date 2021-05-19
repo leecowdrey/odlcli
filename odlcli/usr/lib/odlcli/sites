@@ -5,7 +5,7 @@ site_list() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/restconf/config/jsonrpc:config/configured-endpoints/l3vpn-svc-wfe/yang-ext:mount/l3vpn-svc:svn/sites/site/${1}"
+ local HTTP_PATH="${ODL_PREFIX}/config/jsonrpc:config/configured-endpoints/inmarsat-l3vpn-svc-wfe/yang-ext:mount/inmarsat-l3vpn-svc:svn/sites/site/${1}"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"
@@ -50,7 +50,7 @@ sites_list() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/restconf/config/jsonrpc:config/configured-endpoints/l3vpn-svc-wfe/yang-ext:mount/-l3vpn-svc:svn/sites"
+ local HTTP_PATH="${ODL_PREFIX}/config/jsonrpc:config/configured-endpoints/inmarsat-l3vpn-svc-wfe/yang-ext:mount/inmarsat-l3vpn-svc:svn/sites"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"

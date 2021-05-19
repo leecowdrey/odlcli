@@ -390,7 +390,7 @@ aaa_help_list() {
   fi
     echo " - insert/append new policies will be inserted before or appended after the supplied <<line-number>> - default is append"
     echo " - if no <<line-number>> supplied, append will be after exsting last policy and insert will be before last policy"
-    echo " - URL resources should include all appropriate wildcards, i.e. /restconf/** , /rests/data/network-topology:network-topology/topology=topology-netconf/**"
+    echo " - URL resources should include all appropriate wildcards, i.e. ${ODL_PREFIX}/** , ${ODL_PREFIX}/data/network-topology:network-topology/topology=topology-netconf/**"
   echo " "
   if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
     echo -e "\e[31m\e[1mWarning${TTY_NORMAL}:"
@@ -418,7 +418,6 @@ nodes_help_list() {
   echo "        [ --encrypt                    ] encrypt passwords"
   echo "   list                                  List known nodes"
   echo "   status                                List connection status of known nodes"
-  echo "        [ --summary                    ] List number of nodes connected, connecting, unable-to-connect in summary form"
   echo "   state  <<node-id>> | --all            ONF control-construct operational state"
   echo "       [  --yang-model <<model>>       ] YANG model, defaults to core-model-1-4"
   echo "       [  --exclude <<node-id>>        ] Exclude specified node, repeat as necessary"
@@ -466,7 +465,7 @@ query_help_list() {
     echo "Usage: ${cli_name} query [method] [path]"
     echo "Parameters:"
   fi
-  echo "   get '<<URL Path>>'                   RESTCONF Get URL path, do not include /rests/data prefix i.e."
+  echo "   get '<<URL Path>>'                   RESTCONF Get URL path, do not include ${ODL_PREFIX}/data prefix i.e."
   echo "                                        GET '/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id)'"
   return ${RETVAL}
 }
@@ -485,6 +484,7 @@ set_help_list() {
   echo "   protocol  Set RESTCONF API protocol"
   echo "   host      Set RESTCONF API host"
   echo "   port      Set RESTCONF API port number"
+  echo "   prefix    Set RESTCONF API path prefix [${ODL_PREFIX}]"
   echo "   timeout   Set RESTCONF API connection timeout (seconds)"
   echo "   maxtime   Set RESTCONF API max wait timeout (seconds)"
   echo "   <<name>>  Set custom parameter"
@@ -507,6 +507,7 @@ show_help_list() {
   echo "   protocol    Show RESTCONF API protocol"
   echo "   host        Show RESTCONF API host"
   echo "   port        Show RESTCONF API port number"
+  echo "   prefix      Show RESTCONF API path prefix [${ODL_PREFIX}]"
   echo "   timeout     Show RESTCONF API connection timeout (seconds)"
   echo "   maxtime     Show RESTCONF API max wait timeout (seconds)"
   echo "   juser       Show Jolokia username"
