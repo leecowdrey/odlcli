@@ -1,6 +1,12 @@
 #!/bin/bash
 RETVAL=0
 
+version_list() {
+  local RETVAL=0
+  echo "${CLI_VERSION}"
+  return ${RETVAL}
+}
+
 restconf_capabilities() {
  local RETVAL=0
  local HTTP_CODE=""
@@ -49,6 +55,10 @@ else
   help|?)
     show_help_list
     RETVAL=0
+    ;;
+  version)
+    version_list
+    RETVAL=$?
     ;;
   jpass|jpassword)
     PARAM="${1}"

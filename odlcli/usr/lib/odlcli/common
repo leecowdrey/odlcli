@@ -502,6 +502,7 @@ show_help_list() {
     echo "Usage: ${cli_name} show [parameter] | --all"
     echo "Parameters:"
   fi
+  echo "   version     ${cli_name} version"
   echo "   user        Show RESTCONF API username"
   echo "   pass        Show RESTCONF API password"
   echo "   protocol    Show RESTCONF API protocol"

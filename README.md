@@ -122,6 +122,7 @@ $
             jpass     Set Jolokia password
 #### SHOW
        • show [parameter] | --all - View [odlcli] environment parameters and additional capabilities of the linked SDNc that are exposed via RESTCONF
+            version     Show CLI version
             user        Show RESTCONF API username
             password    Show RESTCONF API password
             protocol    Show RESTCONF API protocol
