@@ -1,12 +1,12 @@
 #!/bin/bash
 RETVAL=0
-STREAMS_PREFIX="${ODL_PROTOCOL,,}://${ODL_HOST}:${ODL_PORT}/rests/notif/notification-stream/"
+STREAMS_PREFIX="${ODL_PROTOCOL,,}://${ODL_HOST}:${ODL_PORT}${ODL_PREFIX}/notif/notification-stream/"
 
 streams_bootstrap() {
   local RETVAL=0
   local HTTP_CODE=""
   local HTTP_RESPONSE="/dev/null"
-  local HTTP_PATH="/rests/data/ietf-restconf-monitoring:restconf-state/streams"
+  local HTTP_PATH="${ODL_PREFIX}/data/ietf-restconf-monitoring:restconf-state/streams"
   local HTTP_BODY="/dev/null"
   local HTTP_METHOD="GET"
   local HTTP_CONTENT_TYPE="*/*"
@@ -118,7 +118,7 @@ streams_list() {
  local RETVAL=0
  local HTTP_CODE=""
  local HTTP_RESPONSE=""
- local HTTP_PATH="/rests/data/ietf-restconf-monitoring:restconf-state/streams"
+ local HTTP_PATH="${ODL_PREFIX}/data/ietf-restconf-monitoring:restconf-state/streams"
  local HTTP_BODY="/dev/null"
  local HTTP_METHOD="GET"
  local HTTP_CONTENT_TYPE="application/yang-data+json"
