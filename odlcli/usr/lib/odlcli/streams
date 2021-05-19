@@ -150,9 +150,11 @@ streams_list() {
         if [ ${STREAMS} -gt 0 ] ; then
           local STREAM=0
           if [[ ${ENCODING_JSON} -eq 0 && ${ENCODING_XML} -eq 0 ]] ; then
-            echo "[]short-name|name|replay-support|encoding|url"
+#            echo "[]short-name|name|replay-support|encoding|url"
+             echo "[]short-name|replay-support|encoding"
           else
-            echo "[]short-name|name|replay-support|url"
+#            echo "[]short-name|name|replay-support|url"
+             echo "[]short-name|replay-support"
           fi
           while [ ${STREAM} -lt ${STREAMS} ] ; do
            local SHORT_NAME=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream[${STREAM}].name" ${HTTP_RESPONSE})
@@ -165,10 +167,13 @@ streams_list() {
              local TMP_URL="${URL#*$STREAMS_PREFIX}"
              local NAME="${TMP_URL%$STREAM_JSON_SUFFIX*}"
              if [[ ${ENCODING_JSON} -eq 0 && ${ENCODING_XML} -eq 0 ]] ; then
-               echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${ENCODING,,}|${URL}"
+#               echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${ENCODING,,}|${URL}"
+               echo "${SHORT_NAME}|${REPLAY_SUPPORT}|${ENCODING,,}"
              else
-               [[ ${ENCODING_JSON} -eq 0 && "${ENCODING,,}" == "json" ]] && echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${URL}"
-               [[ ${ENCODING_XML} -eq 0 && "${ENCODING,,}" == "xml" ]] && echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${URL}"
+#               [[ ${ENCODING_JSON} -eq 0 && "${ENCODING,,}" == "json" ]] && echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${URL}"
+               [[ ${ENCODING_JSON} -eq 0 && "${ENCODING,,}" == "json" ]] && echo "${SHORT_NAME}|${REPLAY_SUPPORT}"
+#               [[ ${ENCODING_XML} -eq 0 && "${ENCODING,,}" == "xml" ]] && echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${URL}"
+               [[ ${ENCODING_XML} -eq 0 && "${ENCODING,,}" == "xml" ]] && echo "${SHORT_NAME}|${REPLAY_SUPPORT}"
              fi
              ((ACCESS=ACCESS+1))
            done
