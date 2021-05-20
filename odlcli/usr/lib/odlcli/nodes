@@ -1014,6 +1014,18 @@ EOS
  return ${RETVAL}
 }
 
+node_schemas_list() {
+  local RETVAL=0
+
+  return ${RETVAL}
+}
+
+node_schemas_fetch() {
+  local RETVAL=0
+
+  return ${RETVAL}
+}
+
 if [ $# -eq 0 ] ; then
   nodes_help_list
   RETVAL=0
@@ -1057,6 +1069,29 @@ else
     shift
     nodes_unmount ${@}
     RETVAL=$?
+    ;;
+  schemas)
+    shift
+    case "${1,,}" in
+      help|?)
+        nodes_help_list
+        RETVAL=0
+        ;;
+      list)
+        shift
+        node_schemas_list ${@}
+        RETVAL=$?
+        ;;
+      fetch)
+        shift
+        node_schema_fetch ${@}
+        RETVAL=$?
+        ;;
+      *)
+        nodes_help_list
+        RETVAL=1
+        ;;
+    done
     ;;
   aaa)
     shift
