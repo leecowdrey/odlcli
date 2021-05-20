@@ -2,8 +2,8 @@
 VERSION="1.0.6"
 #git pull
 dpkg-deb --nocheck --build odlcli
-[[ ! -d dists/debian/amd64 ] && mkdir -p dists/debian/amd64
-[[ ! -d dists/rhel/noarch ] && mkdir -p dists/rhel/noarch
+[[ ! -d dists/debian/amd64 ]] && mkdir -p dists/debian/amd64
+[[ ! -d dists/rhel/noarch ]] && mkdir -p dists/rhel/noarch
 mv -f odlcli.deb dists/debian/amd64/odlcli-${VERSION}_amd64.deb
 sudo alien --to-rpm dists/debian/amd64/odlcli-${VERSION}_amd64.deb
 mv -f odlcli-${VERSION}-?.noarch.rpm dists/rhel/noarch/
