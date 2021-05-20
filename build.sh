@@ -1,10 +1,13 @@
 #!/bin/bash
+VERSION="1.0.6"
 #git pull
 dpkg-deb --nocheck --build odlcli
-mv -f odlcli.deb dists/debian/amd64/odlcli-1.0.5_amd64.deb
-sudo alien --to-rpm dists/debian/amd64/odlcli-1.0.5_amd64.deb
-mv -f odlcli-1.0.?-?.noarch.rpm dists/rhel/noarch/
-git add dists/debian/amd64/odlcli-1.0.5_amd64.deb
-git add dists/rhel/noarch/odlcli-1.0.?-?.noarch.rpm
+[[ ! -d dists/debian/amd64 ] && mkdir -p dists/debian/amd64
+[[ ! -d dists/rhel/noarch ] && mkdir -p dists/rhel/noarch
+mv -f odlcli.deb dists/debian/amd64/odlcli-${VERSION}_amd64.deb
+sudo alien --to-rpm dists/debian/amd64/odlcli-${VERSION}_amd64.deb
+mv -f odlcli-${VERSION}-?.noarch.rpm dists/rhel/noarch/
+git add dists/debian/amd64/odlcli-${VERSION}_amd64.deb
+git add dists/rhel/noarch/odlcli-${VERSION}-?.noarch.rpm
 git commit -m "lee@cowdrey.co.uk: "
 git push

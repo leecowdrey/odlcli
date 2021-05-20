@@ -1,5 +1,5 @@
 Name:           odlcli
-Version:        1.0.5
+Version:        1.0.6
 Release:        1%{?dist}
 Summary:        OpenDaylight SDN Controller operational CLI interface
 
@@ -44,6 +44,7 @@ install -m 0555 ./%{name}%{_sharedstatedir}/%{name}/show %{buildroot}%{_sharedst
 install -m 0555 ./%{name}%{_sharedstatedir}/%{name}/sites %{buildroot}%{_sharedstatedir}/%{name}/
 install -m 0555 ./%{name}%{_sharedstatedir}/%{name}/streams %{buildroot}%{_sharedstatedir}/%{name}/
 install -m 0555 ./%{name}%{_sharedstatedir}/%{name}/stats %{buildroot}%{_sharedstatedir}/%{name}/
+install -m 0555 ./%{name}%{_sharedstatedir}/%{name}/yang %{buildroot}%{_sharedstatedir}/%{name}/
 install -m 0444 ./%{name}%{_mandir}/man1/%{name}.1 %{buildroot}%{_mandir}/man1/
 install -m 0444 ./%{name}%{_sysconfdir}/bash_completion.d/%{name}.bash_completion %{buildroot}%{_sysconfdir}/bash_completion.d/
 
@@ -68,6 +69,7 @@ install -m 0444 ./%{name}%{_sysconfdir}/bash_completion.d/%{name}.bash_completio
 %{_sharedstatedir}/%{name}/sites
 %{_sharedstatedir}/%{name}/stats
 %{_sharedstatedir}/%{name}/streams
+%{_sharedstatedir}/%{name}/yang
 %{_mandir}/man1/%{name}.1.gz
 %{_sysconfdir}/bash_completion.d/%{name}.bash_completion
 
