@@ -69,7 +69,7 @@ node_schemas_list() {
  local HTTP_BODY=""
  local HTTP_METHOD="POST"
  local HTTP_CONTENT_TYPE="application/xml"
- local HTTP_ACCEPT="applicaiton/yang-data+json"
+ local HTTP_ACCEPT="application/yang-data+json"
  mk_tmp_file HTTP_RESPONSE
  mk_tmp_file HTTP_BODY
  cat >${HTTP_BODY} <<SCHEMAS-EOF
