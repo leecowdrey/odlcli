@@ -439,6 +439,8 @@ nodes_help_list() {
   echo "       [ --max-attempts <<attempts>>   ] maximum attempts of connecting to node, default 0/unlimited"
   echo "       [ --concurrent <<rpc-limit>>    ] maximum of RPC to send before response received, default 0/unlimited"
   echo "   ummount <<node-id>> | --all           Unmount network device/node or all"
+  echo "   schemas --list <<node-id>>            List YANG schemas held within specified node"
+  echo "   schemas --fetch <<node-id>>           Fetech specified YANG schema from specified node"
   return ${RETVAL}
 }
 
