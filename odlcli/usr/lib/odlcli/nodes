@@ -1073,7 +1073,7 @@ else
     nodes_test_aaa ${@}
     RETVAL=$?
     ;;
-  schemas(
+  schemas)
     shift
     case "${1,,}" in
       help|?)
