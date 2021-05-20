@@ -65,7 +65,7 @@ node_schemas_list() {
  local HTTP_CODE=""
  local HTTP_RESPONSE="/dev/null"
  local NODE_ID="${1}"
- local HTTP_PATH="${ODL_PREFIX}/operations/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/ietf-netconf:get
+ local HTTP_PATH="${ODL_PREFIX}/operations/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/ietf-netconf:get"
  local HTTP_BODY=""
  local HTTP_METHOD="POST"
  local HTTP_CONTENT_TYPE="application/xml"
