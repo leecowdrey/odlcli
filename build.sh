@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="1.0.6"
+VERSION="1.0.7"
 #git pull
 dpkg-deb --nocheck --build odlcli
 [[ ! -d dists/debian/amd64 ]] && mkdir -p dists/debian/amd64

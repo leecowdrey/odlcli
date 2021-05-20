@@ -438,6 +438,11 @@ nodes_help_list() {
   echo "       [ --tcp-only                    ] node limited to TCP only"
   echo "       [ --max-attempts <<attempts>>   ] maximum attempts of connecting to node, default 0/unlimited"
   echo "       [ --concurrent <<rpc-limit>>    ] maximum of RPC to send before response received, default 0/unlimited"
+  echo "   schema list <<node-id>>               List known YANG schemas on mounted node"
+  echo "   schema fetch <<node-id>>              Fetch known YANG schemas on mounted node"
+  echo "         --identifier <<schema>>         YANG schema identifier, e.g. ietf-netconf-monitoring"
+  echo "       [ --version <<version>>         ] YANG schema revision, e.g. 2010-10-04"
+  echo "       [ --format <<format>>           ] YANG schema format, e.g. yang - default yang"
   echo "   ummount <<node-id>> | --all           Unmount network device/node or all"
   return ${RETVAL}
 }
@@ -571,20 +576,16 @@ stats_help_list() {
   return ${RETVAL}
 }
 
-yang_help_list() {
+schema_help_list() {
   local RETVAL=0
   if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
-    echo -e "Usage: ${TTY_BOLD}yang [cmd]${TTY_NORMAL}"
+    echo -e "Usage: ${TTY_BOLD}schema [cmd]${TTY_NORMAL}"
     echo -e "${TTY_BOLD}Commands${TTY_NORMAL}:"
   else
-    echo "Usage: ${cli_name} yang [cmd]"
+    echo "Usage: ${cli_name} schema [cmd]"
     echo "Commands:"
   fi
   echo "   list                     List known YANG schemas"
-  echo "   node list <<node-id>>    List known YANG schemas on mounted node"
-  echo "   node fetch <<node-id>>   Fetch known YANG schemas on mounted node"
-  echo "              <<schema>>    "
-  echo "           [[ --revision <<revision>> ]]"
   return ${RETVAL}
 }
 

@@ -154,6 +154,11 @@ nodes - Manage NETCONF nodes (network devices) connected to the SDNc
       [ --tcp-only                    ] node limited to TCP only
       [ --max-attempts <<attempts>>   ] maximum attempts of connecting to node, default 0/unlimited
       [ --concurrent <<rpc-limit>>    ] maximum of RPC to send before response received, default 0/unlimited
+   schema list <<node-id>>              List known YANG schemas on mounted node
+   schema fetch <<node-id>>             Fetch known YANG schemas on mounted node
+         --identifier <<schema>>        YANG schema identifier, e.g. ietf-netconf-monitoring
+       [ --version <<version>>        ] YANG schema revision, e.g. 2010-10-04
+       [ --format <<format>>          ] YANG schema format, e.g. yang - default yang
    ummount <<node-id>> | --all          Unmount network device/node or all
 .IP \[bu]
 yang [cmd] - Display various details on known YANG models, including:
