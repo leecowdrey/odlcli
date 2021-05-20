@@ -439,8 +439,6 @@ nodes_help_list() {
   echo "       [ --max-attempts <<attempts>>   ] maximum attempts of connecting to node, default 0/unlimited"
   echo "       [ --concurrent <<rpc-limit>>    ] maximum of RPC to send before response received, default 0/unlimited"
   echo "   ummount <<node-id>> | --all           Unmount network device/node or all"
-  echo "   schemas --list <<node-id>>            List YANG schemas held within specified node"
-  echo "   schemas --fetch <<node-id>>           Fetech specified YANG schema from specified node"
   return ${RETVAL}
 }
 
@@ -582,7 +580,11 @@ yang_help_list() {
     echo "Usage: ${cli_name} yang [cmd]"
     echo "Commands:"
   fi
-  echo "   list [module]            List known YANG models"
+  echo "   list                     List known YANG schemas"
+  echo "   node list <<node-id>>    List known YANG schemas on mounted node"
+  echo "   node fetch <<node-id>>   Fetch known YANG schemas on mounted node"
+  echo "              <<schema>>    "
+  echo "           [[ --revision <<revision>> ]]"
   return ${RETVAL}
 }
 

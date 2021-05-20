@@ -54,6 +54,17 @@ yang_list() {
  return ${RETVAL}
 }
 
+
+node_schemas_list() {
+ local RETVAL=0
+ return ${RETVAL}
+}
+
+node_schema_fetch() {
+ local RETVAL=0
+ return ${RETVAL}
+}
+
 if [ $# -eq 0 ] ; then
   yang_help_list
   RETVAL=0
@@ -67,6 +78,29 @@ else
     shift
     yang_list "${@}"
     RETVAL=$?
+    ;;
+  node)
+    shift
+    case "${1,,}" in
+      help|?)
+        yang_help_list
+        RETVAL=0
+        ;;
+      list)
+        shift
+        node_schemas_list ${@}
+        RETVAL=$?
+        ;;
+      fetch)
+        shift
+        node_schema_fetch ${@}
+        RETVAL=$?
+        ;;
+      *)
+        yang_help_list
+        RETVAL=1
+        ;;
+    done
     ;;
   *)
     yang_help_list
