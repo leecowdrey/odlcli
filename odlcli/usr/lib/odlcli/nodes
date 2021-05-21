@@ -818,7 +818,7 @@ nodes_test() {
 
  if [[ -n "${NODE_HOST}" && -n "${NODE_PORT}" && -n "${NODE_USER}" && -n "${NODE_PASS}" ]] ; then
    [[ ${RECURSIVE} -eq 1 ]] && echo "[]node-id|node-host|node-port|ip-ping|ssh-ping|netconf-handshake"
-   local NODE_IP_LOOKUP=$(getent hosts ${NODE_HOST}|head -1|awk ‘{ print $1 }’)
+   local NODE_IP_LOOKUP=$(getent hosts ${NODE_HOST}|head -1|awk '{ print $1 }')
    local NODE_IP="${NODE_IP_LOOKUP:-$NODE_HOST}"
    if [[ ${NODE_IP} =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] ; then
      ping -c 1 -n -q ${NODE_IP} &>/dev/null
