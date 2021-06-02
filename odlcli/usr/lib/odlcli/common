@@ -443,7 +443,6 @@ nodes_help_list() {
   echo "         --identifier <<schema>>         YANG schema identifier, e.g. ietf-netconf-monitoring"
   echo "       [ --version <<version>>         ] YANG schema revision, e.g. 2010-10-04"
   echo "       [ --format <<format>>           ] YANG schema format, e.g. yang - default yang"
-  echo "   schema library                        YANG Library Version (revision)"
   echo "   ummount <<node-id>> | --all           Unmount network device/node or all"
   return ${RETVAL}
 }
@@ -587,6 +586,7 @@ schema_help_list() {
     echo "Commands:"
   fi
   echo "   list                     List known YANG schemas"
+  echo "   library                  List YANG Library Version (revision)"
   return ${RETVAL}
 }
 
