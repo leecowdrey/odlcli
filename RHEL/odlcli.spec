@@ -1,5 +1,5 @@
 Name:           odlcli
-Version:        1.0.6
+Version:        1.0.7
 Release:        1%{?dist}
 Summary:        OpenDaylight SDN Controller operational CLI interface
 

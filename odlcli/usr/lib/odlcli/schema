@@ -1,6 +1,34 @@
 #!/bin/bash
 RETVAL=0
 
+schema_yang_library() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/yang-library-version"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/yang-data+json"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        echo "[]yang-library-version"
+        local VERSION=$(jq -r ".\"ietf-restconf:yang-library-version\"" ${HTTP_RESPONSE})
+        echo "${VERSION,,}"
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
 schema_list() {
  local RETVAL=0
  local HTTP_CODE=""
@@ -63,6 +91,10 @@ else
   help|?)
     schema_help_list
     RETVAL=0
+    ;;
+  library)
+    schema_yang_library
+    RETVAL=$?
     ;;
   list)
     shift
