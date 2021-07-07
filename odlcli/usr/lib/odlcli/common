@@ -555,6 +555,8 @@ streams_help_list() {
   echo "    monitor <<stream>>         Interactively subscribe and display RFC8040 stream"
   echo "                               <<stream>> is stream location segment"
   echo "                               i.e. ietf-netconf-notifications:netconf-config-change"
+  echo "         [ --sse             ] RFC8040 Server-Sent Events (SSE) stream (default)"
+  echo "         [ --ws              ] WebSockets stream
   echo "         [ --json            ] JSON encoding, rather than default XML encoding"
   return ${RETVAL}
 }

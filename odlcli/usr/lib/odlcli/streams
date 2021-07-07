@@ -62,10 +62,20 @@ stream_monitor() {
   local HTTP_CONTENT_TYPE="application/yang-dat+xml"
   local HTTP_ACCEPT="text/event-stream"
   local HTTP_PATH="${STREAMS_PREFIX}${STREAM_NAME}"
+  local SSE=0
+  local WEBSOCKETS=1
+  local METHOD=${SSE}
   if [ $# -gt 0 ] ; then
     local OPTION="${1}"
     while [ $# -gt 0 ] ; do
       case "${OPTION,,}" in
+        --sse)  shift
+                METHOD=${SSE}
+                ;;
+        --ws)
+                shift
+                METHOD=${WEBSOCKETS}
+                ;;
         --json) shift
                 HTTP_PATH+="/JSON"
                 HTTP_CONTENT_TYPE="application/yang-data+json"
@@ -84,17 +94,38 @@ stream_monitor() {
   local PASSWORD="${CONFIG_VALUE}"
   echo "[]Press CTRL-C to stop"
   trap sigint INT
-  /usr/bin/curl -s \
-                --insecure \
-                --connect-timeout ${ODL_TIMEOUT} \
-                --no-buffer \
-                --keepalive-time ${ODL_MAXTIME} \
-                --user-agent "${USER_AGENT}" \
-                -u "${ODL_USER}:${PASSWORD}" \
-                -H "Cache-control: no-cache" \
-                -H "Accept: ${HTTP_ACCEPT}" \
-                -H "Connection: keep-alive" \
-                "${HTTP_PATH}" &
+  if [ ${METHOD} -eq ${METHOD_WEBSOCKETS} ] ; then
+   /usr/bin/curl -s \
+                 --insecure \
+                 --connect-timeout ${ODL_TIMEOUT} \
+                 --no-buffer \
+                 --keepalive-time ${OLD_MAXTIME} \
+                 --user-agent "${USER_AGENT}" \
+                 -u "${ODL_USER}:${PASSWORD}" \
+                 -H "Cache-control: no-cache" \
+                 -H "Accept: ${HTTP_ACCEPT}" \
+                 -H "Connection: Upgrade" \
+                 -H "Upgrade: websocket" \
+                 -H "Host: ${ODL_HOST}" \
+                 -H "Origin: ${ODL_PROTOCOL}://${ODL_HOST}:${OLD_PORT}" \
+                 "${HTTP_PATH}" &
+  elif [ ${METHOD} -eq ${METHOD_SSE} ] ; then
+   /usr/bin/curl -s \
+                 --insecure \
+                 --connect-timeout ${ODL_TIMEOUT} \
+                 --no-buffer \
+                 --keepalive-time ${ODL_MAXTIME} \
+                 --user-agent "${USER_AGENT}" \
+                 -u "${ODL_USER}:${PASSWORD}" \
+                 -H "Cache-control: no-cache" \
+                 -H "Accept: ${HTTP_ACCEPT}" \
+                 -H "Connection: keep-alive" \
+                 "${HTTP_PATH}" &
+  else
+   RETVAL=1
+   trap - INT
+   return ${RETVAL}
+  fi
   STREAMS_CURL_PID=$!
   while [ true ] ; do
     if [ ${STREAMS_CURL_PID} -eq 0 ] ; then
