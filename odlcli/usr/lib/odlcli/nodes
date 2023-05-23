@@ -1,0 +1,1444 @@
+#!/bin/bash
+RETVAL=0
+declare -a LIST_OF_NODES
+
+get_nodes() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id)"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local NODES=0
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        NODES=$(jq -r ".\"network-topology:topology\"[0].node | length" ${HTTP_RESPONSE})
+        if [ ${NODES} -gt 0 ] ; then
+          local NODE=0
+          while [ ${NODE} -lt ${NODES} ] ; do
+           local NODEID=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"node-id\"" ${HTTP_RESPONSE})
+           LIST_OF_NODES+=(${NODEID})
+           ((NODE=NODE+1))
+          done
+        fi
+      fi
+      RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+nodes_test_aaa() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  nodes_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local NODE_ID=""
+ local NAME=""
+ local PASSWORD=""
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --name)
+              shift
+              if [ -n "${1}" ] ; then
+                NAME="${1}"
+              fi
+              ;;
+      --password)
+              shift
+              if [ -n "${1}" ] ; then
+                PASSWORD=("${1}")
+              fi
+              ;;
+      *)      NODE_ID="${1}"
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ fi
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="application/json"
+ local TMP_ODL_USER=""
+ local TMP_ODL_PASSWORD=""
+ if [ -n "${NAME}" ] ; then
+   TMP_ODL_USER="${ODL_USER}"
+   set_config ODL_USER "${NAME}"
+ fi
+ if [ -n "${PASSWORD}" ] ; then
+   get_password
+   TMP_ODL_PASSWORD="${CONFIG_VALUE}"
+   set_password "${PASSWORD}"
+ fi
+ if [[ -n "${NAME}" || -n "${PASSWORD}" ]] ; then
+   source ~/.${cli_name,,}
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+     if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+       echo -e "${NODE_ID}|${ODL_USER}|${TTY_GREEN}authorized${TTY_NORMAL}"
+     else
+       echo "${NODE_ID}|${ODL_USER}|authorized"
+     fi
+     RETVAL=0
+   elif [ "${CURL_HTTP_CODE}" == "401" ] ; then
+     if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+       echo -e "${NODE_ID}|${ODL_USER}|${TTY_RED}unauthorized${TTY_NORMAL}"
+     else
+       echo "${NODE_ID}|${ODL_USER}|unauthorized"
+     fi
+     RETVAL=1
+   else
+    if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+      echo -e "${NODE_ID}|${ODL_USER}|${TTY_AMBER}${CURL_RETVAL}${TTY_NORMAL}"
+    else
+      echo "${NODE_ID}|${ODL_USER}|${CURL_RETVAL}"
+    fi
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ if [ -n "${NAME}" ] ; then
+   set_config ODL_USER "${TMP_ODL_USER}"
+ fi
+ if [ -n "${PASSWORD}" ] ; then
+   set_password "${TMP_ODL_PASSWORD}"
+ fi
+ if [[ -n "${NAME}" || -n "${PASSWORD}" ]] ; then
+   source ~/.${cli_name,,}
+ fi
+ return ${RETVAL}
+}
+
+nodes_config() {
+ local RETVAL=0
+ local NODE_RETVAL=0
+ local NODE_ALL=1
+ local NODE_ID=""
+ declare EXCLUDE_NODES
+
+ node_config() {
+   local RETVAL=0
+   local HTTP_CODE=""
+   local HTTP_RESPONSE=""
+   if [ $# -eq 0 ] ; then
+    RETVAL=1
+    return ${RETVAL}
+   fi
+   echo "${1}"
+   local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${1}/yang-ext:mount?content=config"
+   local HTTP_BODY="/dev/null"
+   local HTTP_METHOD="GET"
+   local HTTP_CONTENT_TYPE="application/yang-data+json"
+   local HTTP_ACCEPT="application/yang-data+json"
+   mk_tmp_file HTTP_RESPONSE 
+   http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+   if [ ${CURL_RETVAL} -eq 0 ] ; then
+     if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       NODE_HTTP_BODY_SIZE=$(cat ${HTTP_RESPONSE}|wc -c)
+       if [ ${NODE_HTTP_BODY_SIZE} -gt 0 ] ; then
+         cat ${HTTP_RESPONSE}|jq
+         RETVAL=0
+       else
+         RETVAL=2
+       fi
+     else
+       RETVAL=3
+     fi
+   elif [ ${CURL_RETVAL} -eq 28 ] ; then
+    RETVAL=4
+   fi
+   rm_tmp_file "${HTTP_RESPONSE}"
+   return ${RETVAL}
+  }
+
+ EXCLUDE_NODES+=("NTS-Manager")
+
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --exclude)
+              shift
+              if [ -n "${1}" ] ; then
+                EXCLUDE_NODES+=("${1}")
+              fi
+              ;;
+      --all)
+              NODE_ALL=0
+              ;;
+      *)      NODE_ID="${1}"
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ fi
+
+ if [ ${NODE_ALL} -eq 0 ] ; then
+   unset LIST_OF_NODES
+   get_nodes
+   if [ $? -eq 0 ] ; then
+     echo "[]node-id|config"
+     for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+       if [[ ! ${EXCLUDE_NODES[@],,} =~ "${LIST_OF_NODES[$I],,}" ]] ; then
+         node_config "${LIST_OF_NODES[$I]}"
+         RETVAL=$?
+        fi
+     done
+   fi
+   for ((I = 0; I < ${#EXCLUDE_NODES[@]}; ++I)); do
+     echo "${EXCLUDE_NODES[$I]}|skipping"
+   done
+   unset LIST_OF_NODES
+   unset EXCLUDE_NODES
+ else
+  if [ -n "${NODE_ID}" ] ; then
+    node_config "${NODE_ID}"
+    RETVAL=$?
+  else
+    RETVAL=1
+  fi
+ fi
+ return ${RETVAL}
+}
+
+nodes_nonconfig() {
+ local RETVAL=0
+ local NODE_RETVAL=0
+ local NODE_ALL=1
+ local NODE_ID=""
+ declare EXCLUDE_NODES
+
+ node_nonconfig() {
+   local RETVAL=0
+   local HTTP_CODE=""
+   local HTTP_RESPONSE=""
+   if [ $# -eq 0 ] ; then
+    RETVAL=1
+    return ${RETVAL}
+   fi
+   echo "${1}"
+   local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${1}/yang-ext:mount?content=nonconfig"
+   local HTTP_BODY="/dev/null"
+   local HTTP_METHOD="GET"
+   local HTTP_CONTENT_TYPE="application/yang-data+json"
+   local HTTP_ACCEPT="application/yang-data+json"
+   mk_tmp_file HTTP_RESPONSE
+   http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+   if [ ${CURL_RETVAL} -eq 0 ] ; then
+     if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       NODE_HTTP_BODY_SIZE=$(cat ${HTTP_RESPONSE}|wc -c)
+       if [ ${NODE_HTTP_BODY_SIZE} -gt 0 ] ; then
+         cat ${HTTP_RESPONSE}|jq
+         RETVAL=0
+       else
+         RETVAL=2
+       fi
+     else
+       RETVAL=3
+     fi
+   elif [ ${CURL_RETVAL} -eq 28 ] ; then
+    RETVAL=4
+   fi
+   rm_tmp_file "${HTTP_RESPONSE}"
+   return ${RETVAL}
+  }
+
+ EXCLUDE_NODES+=("NTS-Manager")
+
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --exclude)
+              shift
+              if [ -n "${1}" ] ; then
+                EXCLUDE_NODES+=("${1}")
+              fi
+              ;;
+      --all)
+              NODE_ALL=0
+              ;;
+      *)      NODE_ID="${1}"
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ fi
+
+ if [ ${NODE_ALL} -eq 0 ] ; then
+   unset LIST_OF_NODES
+   get_nodes
+   if [ $? -eq 0 ] ; then
+     echo "[]node-id|nonconfig"
+     for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+       if [[ ! ${EXCLUDE_NODES[@],,} =~ "${LIST_OF_NODES[$I],,}" ]] ; then
+         node_nonconfig "${LIST_OF_NODES[$I]}"
+         RETVAL=$?
+        fi
+     done
+   fi
+   for ((I = 0; I < ${#EXCLUDE_NODES[@]}; ++I)); do
+     echo "${EXCLUDE_NODES[$I]}|skipping"
+   done
+   unset LIST_OF_NODES
+   unset EXCLUDE_NODES
+ else
+  if [ -n "${NODE_ID}" ] ; then
+    node_nonconfig "${NODE_ID}"
+    RETVAL=$?
+  else
+    RETVAL=1
+  fi
+ fi
+ return ${RETVAL}
+}
+
+nodes_state() {
+ local RETVAL=0
+ local NODE_HTTP_BODY_SIZE=0
+ local LTP_STATUS=""
+
+ nodes_state_extended() {
+   local RETVAL=0
+   local HTTP_CODE=""
+   local HTTP_RESPONSE=""
+   if [ $# -eq 0 ] ; then
+    RETVAL=1
+    return ${RETVAL}
+   fi
+   local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${1}/yang-ext:mount/${2}:control-construct?content=nonconfig&fields=logical-termination-point(uuid;layer-protocol(local-id;layer-protocol-name))"
+   local HTTP_BODY="/dev/null"
+   local HTTP_METHOD="GET"
+   local HTTP_CONTENT_TYPE="application/yang-data+json"
+   local HTTP_ACCEPT="application/yang-data+json"
+   mk_tmp_file HTTP_RESPONSE 
+   http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+   if [ ${CURL_RETVAL} -eq 0 ] ; then
+     if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       NODE_HTTP_BODY_SIZE=$(cat ${HTTP_RESPONSE}|wc -c)
+       if [ ${NODE_HTTP_BODY_SIZE} -gt 0 ] ; then
+         RETVAL=0
+       else
+         RETVAL=2
+       fi
+     else
+       RETVAL=3
+     fi
+   elif [ ${CURL_RETVAL} -eq 28 ] ; then
+    RETVAL=4
+   fi
+   rm_tmp_file "${HTTP_RESPONSE}"
+   return ${RETVAL}
+  }
+
+  nodes_stat_extended_status() {
+    if [ ${PULL_LTPS} -eq 0 ] ; then
+      NODE_RETVAL=${1}
+      if [ ${NODE_RETVAL} -eq 0 ] ; then
+        LTP_STATUS="|${TTY_GREEN}okay${TTY_NORMAL}|${NODE_HTTP_BODY_SIZE}"
+      else
+        LTP_STATUS="|${TTY_RED}fail${TTY_NORMAL}|${NODE_HTTP_BODY_SIZE}"
+      fi
+    else
+      LTP_STATUS=""
+      NODE_RETVAL=0
+    fi
+  }
+
+ local NODE_RETVAL=0
+ local YANG_MODEL="core-model-1-4"
+ local PULL_LTPS=1
+ local NODE_ALL=1
+ local RECURSIVE=1
+ local NODE_ID=""
+ declare EXCLUDE_NODES
+ EXCLUDE_NODES+=("NTS-Manager")
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --yang-model)
+              shift
+              if [ -n "${1}" ] ; then
+                YANG_MODEL="${1}"
+              fi
+              ;;
+      --exclude)
+              shift
+              if [ -n "${1}" ] ; then
+                EXCLUDE_NODES+=("${1}")
+              fi
+              ;;
+      --extended)
+              PULL_LTPS=0
+              ;;
+      --recursive)
+              RECURSIVE=0
+              ;;
+      --timeout)
+              shift
+              if [ -n "${1}" ] ; then
+                [[ ${1} -gt 0 ]] && ODL_MAXTIME=${1}
+              fi
+              ;;
+      --all)
+              NODE_ALL=0
+              ;;
+      *)      NODE_ID="${1}"
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ fi
+
+ if [ ${NODE_ALL} -eq 0 ] ; then
+   unset LIST_OF_NODES
+   get_nodes
+   if [ $? -eq 0 ] ; then
+     echo "[]node-id|${YANG_MODEL}:operational-state|LTP-status|LTP-size"
+     for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+       if [[ ! ${EXCLUDE_NODES[@],,} =~ "${LIST_OF_NODES[$I],,}" ]] ; then
+         if [ ${PULL_LTPS} -eq 0 ] ; then
+           nodes_state --yang-module "${YANG_MODEL}" --timeout ${ODL_MAXTIME} --extended --recursive "${LIST_OF_NODES[$I]}"
+         else
+           nodes_state --yang-module "${YANG_MODEL}" --timeout ${ODL_MAXTIME} --recursive "${LIST_OF_NODES[$I]}"
+         fi
+         RETVAL=$?
+       fi
+       done
+       RETVAL=0
+   fi
+   for ((I = 0; I < ${#EXCLUDE_NODES[@]}; ++I)); do
+     echo "${EXCLUDE_NODES[$I]}|skipping"
+   done
+   unset LIST_OF_NODES
+   unset EXCLUDE_NODES
+   return ${RETVAL}
+ fi
+
+ if [ -n "${NODE_ID}" ] ; then
+   [[ ${RECURSIVE} -eq 1 ]] && echo "[]node-id|${YANG_MODEL}:operational-state|LTP-status|LTP-size"
+   local HTTP_CODE=""
+   local HTTP_RESPONSE=""
+   local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/${YANG_MODEL}:control-construct/operational-state"
+   local HTTP_BODY="/dev/null"
+   local HTTP_METHOD="GET"
+   local HTTP_CONTENT_TYPE="application/yang-data+json"
+   local HTTP_ACCEPT="application/json"
+   mk_tmp_file HTTP_RESPONSE
+   http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+   if [ -n "${NODE_ID}" ] ; then
+     if [ ${CURL_RETVAL} -eq 0 ] ; then
+       if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+         if [ -f "${HTTP_RESPONSE}" ] ; then
+           local STATE=$(jq -r ".\"${YANG_MODEL}:operational-state\"" ${HTTP_RESPONSE})
+           if [[ "${STATE,,}" =~ "enabled" ]] ; then
+             if [ ${PULL_LTPS} -eq 0 ] ; then
+               nodes_state_extended "${NODE_ID}" "${YANG_MODEL}"
+               nodes_stat_extended_status ${NODE_RETVAL}
+             else
+               LTP_STATUS=""
+               NODE_RETVAL=0
+             fi
+             if [ ${PULL_LTPS} -eq 0 ] ; then
+               nodes_state_extended "${NODE_ID}" "${YANG_MODEL}"
+               nodes_stat_extended_status ${NODE_RETVAL}
+             else
+               LTP_STATUS=""
+               NODE_RETVAL=0
+             fi
+             if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+               echo -e "${NODE_ID}|${TTY_GREEN}enabled${TTY_NORMAL}${LTP_STATUS}"
+             else
+               echo "${NODE_ID}|enabled${LTP_STATUS}"
+             fi
+           elif [[ "${STATE,,}" =~ "disabled" ]] ; then
+             if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+               echo -e "${NODE_ID}|${TTY_AMBER}disabled${TTY_NORMAL}||"
+             else
+               echo "${NODE_ID}|disabled||"
+             fi
+             LTP_STATUS=""
+             NODE_RETVAL=0
+           else
+             local PREFIX="${YANG_MODEL}:"
+             if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+               echo -e "${NODE_ID}|${TTY_RED}${STATE#*$PREFIX}${TTY_NORMAL}||"
+             else
+               echo "${NODE_ID}|${STATE#*$PREFIX}||"
+             fi
+             LTP_STATUS=""
+             NODE_RETVAL=1
+           fi
+         else
+           if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+             echo -e "${NODE_ID}|${TTY_RED}not reachable${TTY_NORMAL}||"
+           else
+             echo "${NODE_ID}|not reachable||"
+           fi
+           LTP_STATUS=""
+           NODE_RETVAL=1
+         fi
+       fi
+     elif [ ${CURL_RETVAL} -eq 28 ] ; then
+       if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+         echo -e "${NODE_ID}|${TTY_RED}timeout${TTY_NORMAL} (>${ODL_MAXTIME})||"
+       else
+         echo "${NODE_ID}|timeout (>${ODL_MAXTIME})||"
+       fi
+       LTP_STATUS=""
+       NODE_RETVAL=2
+     fi
+   fi
+ fi
+ return ${RETVAL}
+}
+
+export_nodes() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf?content=config"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local NODES=0
+ local ENCRYPT=1
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --encrypt)
+              ENCRYPT=0
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        NODES=$(jq -r ".\"network-topology:topology\"[0].node | length" ${HTTP_RESPONSE})
+        if [ ${NODES} -gt 0 ] ; then
+          local NODE=0
+          while [ ${NODE} -lt ${NODES} ] ; do
+           local NODEID=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"node-id\"" ${HTTP_RESPONSE})
+           local ROCS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:reconnect-on-changed-schema\"" ${HTTP_RESPONSE})
+           local SCD=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:schema-cache-directory\"" ${HTTP_RESPONSE})
+           local PASSWORD=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:password\"" ${HTTP_RESPONSE})
+           local USERNAME=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:username\"" ${HTTP_RESPONSE})
+           local PORT=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:port\"" ${HTTP_RESPONSE})
+           local TCP_ONLY=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:tcp-only\"" ${HTTP_RESPONSE})
+           local TIMEOUT=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:default-request-timeout-millis\"" ${HTTP_RESPONSE})
+           local HOST=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:host\"" ${HTTP_RESPONSE})
+           local CONCURRENT=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:concurrent-rpc-limit\"" ${HTTP_RESPONSE})
+           local MAX_ATTEMPTS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:max-connection-attempts\"" ${HTTP_RESPONSE})
+           local SCHEMALESS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:schemaless\"" ${HTTP_RESPONSE})
+           echo -n "${cli_name,,} nodes mount ${NODEID} --host ${HOST} --port ${PORT}"
+           [[ -n "${CONCURRENT}" && "${CONCURRENT,,}" != "null" ]] && echo -n " --concurrent ${CONCURRENT}"
+           [[ "${TCP_ONLY,,}" == "true" ]] && echo -n " --tcp-only"
+           [[ -n "${SCD}" && "${SCD,,}" != "null" ]] && echo -n " --cache ${SCD}"
+           [[ "${ROCS}" == "true" && "${ROCS,,}" != "null" ]] && echo -n " --cschema"
+           [[ -n "${MAX_ATTEMPTS}" && "${MAX_ATTEMPTS,,}" != "null" ]] && echo -n " --max-attempts ${MAX_ATTEMPTS}"
+           [[ -n "${TIMEOUT}" && "${TIMEOUT,,}" != "null" ]] && echo -n " --timeout ${TIMEOUT}"
+           [[ -n "${SCHEMALESS}" && "${SCHEMALESS,,}" != "null" ]] && echo -n " --schemaless"
+           echo -n " --username ${USERNAME}"
+           if [ ${ENCRYPT} -eq 0 ] ; then
+             encrypt "${PASSWORD}"
+             echo " --encrypted-password ${CONFIG_VALUE}"
+             CONFIG_VALUE=""
+           else
+             echo " --password ${PASSWORD}"
+           fi
+           LIST_OF_NODES+=(${NODEID})
+           ((NODE=NODE+1))
+          done
+        fi
+      fi
+      RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+nodes_list() {
+ local RETVAL=0
+ unset LIST_OF_NODES
+ get_nodes
+ RETVAL=$?
+ if [ ${RETVAL} -eq 0 ] ; then
+   echo "[]node-id"
+   for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+      echo "${LIST_OF_NODES[$I]}"
+   done
+ fi
+ unset LIST_OF_NODES
+ return ${RETVAL}
+}
+
+nodes_status() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf?content=nonconfig&fields=node(node-id;netconf-node-topology:connection-status)"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local NODES=0
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        NODES=$(jq -r ".\"network-topology:topology\"[0].node | length" ${HTTP_RESPONSE})
+        echo "[]node-id|connection-status"
+        if [ ${NODES} -gt 0 ] ; then
+          local NODE=0
+          while [ ${NODE} -lt ${NODES} ] ; do
+           local NODEID=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"node-id\"" ${HTTP_RESPONSE})
+           local CONNECTION_STATUS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:connection-status\"" ${HTTP_RESPONSE})
+           if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+             case "${CONNECTION_STATUS,,}" in
+               connected)           echo -e "${NODEID}|${TTY_GREEN}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               connecting)          echo -e "${NODEID}|${TTY_AMBER}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               unable-to-connect)   echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               failed-auth-failure) echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               failed-not-allowed)  echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               failed)              echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+               *)                   echo -e "${NODEID}|${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                    ;;
+             esac
+           else
+             echo "[${NODE}]${NODEID}|${CONNECTION_STATUS}"
+           fi
+           ((NODE=NODE+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+nodes_unmount() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  nodes_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local HTTP_CODE=""
+ local HTTP_RESPONSE="/dev/null"
+ local NODE_ID=""
+ local OPTION="${1}"
+ while [ $# -gt 0 ] ; do
+  case "${OPTION}" in
+   --all|-a) 
+            unset LIST_OF_NODES
+            get_nodes
+            if [ $? -eq 0 ] ; then
+              for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+                nodes_unmount "${LIST_OF_NODES[$I]}"
+                RETVAL=$?
+                if [ ${RETVAL} -gt 0 ] ; then
+                 return ${RETVAL}
+                fi
+              done
+            fi
+            return ${RETVAL}
+            ;;
+   *)        
+            NODE_ID="${1}"
+            ;;
+  esac
+  shift
+  OPTION=$1
+ done
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="DELETE"
+ local HTTP_CONTENT_TYPE="appliation/yang-data+json"
+ local HTTP_ACCEPT="applicaiton/yang-data+json"
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      echo "${NODE_ID}|unmounted"
+      RETVAL=0
+   else
+      RETVAL=${CURL_HTTP_CODE}
+   fi
+ fi
+ return ${RETVAL}
+}
+
+node_mount() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  nodes_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local HTTP_CODE=""
+ local HTTP_RESPONSE="/dev/null"
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${1}"
+ local HTTP_METHOD="PUT"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="applicaiton/yang-data+json"
+ local NODE_ID="${1}"
+ local NODE_CACHE_DIR="schema/"
+ shift
+ local NODE_HOST=""
+ local NODE_USER=""
+ local NODE_PASSWORD=""
+ local NODE_PORT=830
+ local NODE_TCP_ONLY="false"
+ local NODE_RECONNECT_ON_CHANGED_SCHEMA="false"
+ local NODE_RPC_LIMIT=0
+ local NODE_TIMEOUT=300000
+ local NODE_MAX_ATTEMPTS=0
+ local NODE_SCHEMALESS="false"
+ local NODE_KEEPALIVE_DELAY=120
+ local NODE_SLEEP_FACTOR="1.5"
+ local OPTION="${1}"
+ while [ $# -gt 0 ] ; do
+  case "${OPTION,,}" in
+    --host)
+            shift
+            NODE_HOST="${1,,}"
+            ;;
+    --username)
+            shift
+            NODE_USER="${1}"
+            ;;
+    --password)
+            shift
+            NODE_PASSWORD="${1}"
+            ;;
+    --encrypted-password)
+            shift
+            decrypt "${1}"
+            NODE_PASSWORD="${CONFIG_VALUE}"
+            ;;
+    --port)
+            shift
+            NODE_PORT=${1}
+            if [ ${NODE_PORT} -lt 1 ] || [ ${NODE_PORT} -gt 65535 ] ; then
+              NODE_PORT=830
+            fi
+            ;;
+    --tcp-only)
+            NODE_TCP_ONLY="true"
+            ;;
+    --concurrent)
+            shift
+            NODE_RPC_LIMIT=${1}
+            if [ ${NODE_RPC_LIMIT} -lt 0 ] || [ ${NODE_RPC_LIMIT} -gt 65535 ] ; then
+              NODE_RPC_LIMIT=0
+            fi
+            ;;
+    --keepalive-delay)
+            shift
+            NODE_KEEPALIVE_DELAY=${1}
+            ;;
+    --sleep-factor)
+            shift
+            NODE_SLEEP_FACTOR="${1}"
+            ;;
+    --max-attempts)
+            shift
+            NODE_MAX_ATTEMPTS=${1}
+            if [ ${NODE_MAX_ATTEMPTS} -lt 0 ] ; then
+              NODE_MAX_ATTEMPTS=0
+            fi
+            ;;
+    --schemaless)
+            NODE_SCHEMALESS="true"
+            ;;
+    --cache)
+            shift
+            NODE_CACHE_DIR="${1}"
+            ;;
+    --cschema)
+            NODE_RECONNECT_ON_CHANGED_SCHEMA="true"
+            ;;
+    --timeout)
+            shift
+            NODE_TIMEOUT=${1}
+            if [ ${NODE_TIMEOUT} -lt 0 ] ; then
+              NODE_TIMEOUT=300000
+            fi
+            ;;
+  esac
+  shift
+  OPTION=$1
+ done
+ mk_tmp_file HTTP_BODY
+ cat >${HTTP_BODY} <<MOUNT-EOF
+{
+ "node": [
+    {
+     "node-id": "${NODE_ID}",
+     "netconf-node-topology:port": ${NODE_PORT},
+     "netconf-node-topology:default-request-timeout-millis": ${NODE_TIMEOUT},
+     "netconf-node-topology:username": "${NODE_USER}",
+     "netconf-node-topology:password": "${NODE_PASSWORD}",
+     "netconf-node-topology:tcp-only": ${NODE_TCP_ONLY},
+     "netconf-node-topology:host": "${NODE_HOST}",
+     "netconf-node-topology:schema-cache-directory": "${NODE_CACHE_DIR}",
+     "netconf-node-topology:concurrent-rpc-limit": ${NODE_RPC_LIMIT},
+     "netconf-node-topology:max-connection-attempts": ${NODE_MAX_ATTEMPTS},
+     "netconf-node-topology:keepalive-delay": ${NODE_KEEPALIVE_DELAY},
+     "netconf-node-topology:sleep-factor": ${NODE_SLEEP_FACTOR},
+     "netconf-node-topology:schemaless": ${NODE_SCHEMALESS},
+     "reconnect-on-changed-schema": ${NODE_RECONNECT_ON_CHANGED_SCHEMA} 
+    }
+ ]
+}
+MOUNT-EOF
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      echo "${NODE_ID}|mounted"
+      RETVAL=0
+   else
+      RETVAL=${CURL_HTTP_CODE}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+nodes_unmount() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  nodes_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local HTTP_CODE=""
+ local HTTP_RESPONSE="/dev/null"
+ local NODE_ID=""
+ local OPTION="${1}"
+ while [ $# -gt 0 ] ; do
+  case "${OPTION}" in
+   --all|-a) 
+            unset LIST_OF_NODES
+            get_nodes
+            if [ $? -eq 0 ] ; then
+              for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+                nodes_unmount "${LIST_OF_NODES[$I]}"
+                RETVAL=$?
+                if [ ${RETVAL} -gt 0 ] ; then
+                 return ${RETVAL}
+                fi
+              done
+            fi
+            return ${RETVAL}
+            ;;
+   *)        
+            NODE_ID="${1}"
+            ;;
+  esac
+  shift
+  OPTION=$1
+ done
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="DELETE"
+ local HTTP_CONTENT_TYPE="appliation/yang-data+json"
+ local HTTP_ACCEPT="applicaiton/yang-data+json"
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      echo "${NODE_ID}|unmounted"
+      RETVAL=0
+   else
+      RETVAL=${CURL_HTTP_CODE}
+   fi
+ fi
+ return ${RETVAL}
+}
+
+nodes_test() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  nodes_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local RECURSIVE=1
+ local NODE_ID=""
+ local NODE_CAPABILITIES=1
+ local NODE_ALL=1
+ declare EXCLUDE_NODES
+ local OPTION="${1}"
+ while [ $# -gt 0 ] ; do
+  case "${OPTION}" in
+   --capabilities)
+          NODE_CAPABILITIES=0
+          ;;
+   --recursive)
+          RECURSIVE=0
+          ;;
+   --exclude)
+          shift
+          if [ -n "${1}" ] ; then
+            EXCLUDE_NODES+=("${1}")
+          fi
+          ;;
+   --timeout)
+          shift
+          if [ -n "${1}" ] ; then
+            [[ ${1} -gt 0 ]] && ODL_TIMEOUT=${1}
+          fi
+          ;;
+   --all) 
+          NODE_ALL=0
+          ;;
+   *)        
+          NODE_ID="${1}"
+          ;;
+  esac
+  shift
+  OPTION=$1
+ done
+
+ if [ ${NODE_ALL} -eq 0 ] ; then
+   unset LIST_OF_NODES
+   get_nodes
+   if [ $? -eq 0 ] ; then
+     echo "[]node-id|node-host|node-port|ip-ping|ssh-ping|netconf-handshake"
+     for ((I = 0; I < ${#LIST_OF_NODES[@]}; ++I)); do
+       if [[ ! ${EXCLUDE_NODES[@],,} =~ "${LIST_OF_NODES[$I],,}" ]] ; then
+         if [ ${NODE_CAPABILITIES} -eq 0 ] ; then
+           nodes_test "${LIST_OF_NODES[$I]}" --capabilities --recursive --timeout ${ODL_TIMEOUT}
+         else
+           nodes_test "${LIST_OF_NODES[$I]}" --recursive --timeout ${ODL_TIMEOUT}
+         fi
+         RETVAL=$?
+       fi
+       done
+       RETVAL=0
+   fi
+   unset LIST_OF_NODES
+   unset EXCLUDE_NODES
+   return ${RETVAL}
+ fi
+
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf?content=config"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local NODE_HOST=""
+ local NODE_PORT=830
+ local NODE_USER=""
+ local NODE_PASS=""
+ local NODE_IP_PING=""
+ local NODE_SSH_PING=""
+ local NODE_HANDSHAKE=""
+ local NODE_PING=250
+ local NODE_SSH_KEYSCAN=250
+ local NETCONF_HELLO_BEGIN=250
+ local NETCONF_HELLO_XMLNS=250
+ local NETCONF_HELLO_CAP_BEGIN=250
+ local NETCONF_HELLO_CAPABILITY=250
+ local NETCONF_HELLO_CAP_END=250
+ local NETCONF_HELLO_SID_BEGIN=250
+ local NETCONF_HELLO_SID_END=250
+ local NETCONF_HELLO_END=250
+ local NETCONF_METHOD=""
+ get_config USE_SUDO
+ local DO_SUDO="${CONFIG_VALUE}"
+ declare -a LIST_OF_NODE_CAPABILITIES
+
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        NODES=$(jq -r ".\"network-topology:topology\"[0].node | length" ${HTTP_RESPONSE})
+        if [ ${NODES} -gt 0 ] ; then
+          local NODE=0
+          while [ ${NODE} -lt ${NODES} ] ; do
+           local NODEID=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"node-id\"" ${HTTP_RESPONSE})
+           if [ "${NODEID,,}" == "${NODE_ID,,}" ] ; then
+             NODE_PASS=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:password\"" ${HTTP_RESPONSE})
+             NODE_USER=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:username\"" ${HTTP_RESPONSE})
+             NODE_PORT=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:port\"" ${HTTP_RESPONSE})
+             NODE_HOST=$(jq -r ".\"network-topology:topology\"[0].node[${NODE}].\"netconf-node-topology:host\"" ${HTTP_RESPONSE})
+             break
+           fi
+           ((NODE=NODE+1))
+          done
+        fi
+      fi
+   fi
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+
+ if [[ -n "${NODE_HOST}" && -n "${NODE_PORT}" && -n "${NODE_USER}" && -n "${NODE_PASS}" ]] ; then
+   [[ ${RECURSIVE} -eq 1 ]] && echo "[]node-id|node-host|node-port|ip-ping|ssh-ping|netconf-handshake"
+   local NODE_IP_LOOKUP=$(getent hosts ${NODE_HOST}|head -1|awk '{ print $1 }')
+   local NODE_IP="${NODE_IP_LOOKUP:-$NODE_HOST}"
+   if [[ ${NODE_IP} =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] ; then
+     ${DO_SUDO} ping -c 1 -n -q ${NODE_IP} &>/dev/null
+   else
+     ${DO_SUDO} ping6 -c 1 -n -q ${NODE_IP} &>/dev/null
+   fi
+   NODE_PING=$?
+
+   ssh-keyscan -T ${ODL_MAXTIME} -H -p ${NODE_PORT} ${NODE_HOST} &>/dev/null
+   NODE_SSH_KEYSCAN=$?
+ 
+   if [ ${NODE_SSH_KEYSCAN} -eq 0 ] ; then
+     NETCONF_HELLO_BEGIN=1
+     NETCONF_HELLO_XMLNS=1
+     NETCONF_HELLO_CAP_BEGIN=1
+     NETCONF_HELLO_CAPABILITY=1
+     NETCONF_HELLO_CAP_END=1
+     NETCONF_HELLO_SID_BEGIN=1
+     NETCONF_HELLO_SID_END=1
+     NETCONF_HELLO_END=1
+     local SSH_XML="<?xml version=\"1.0\" encoding=\"UTF-8\"?><hello xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\">"
+     SSH_XML+="<capabilities><capability>urn:ietf:params:netconf:base:1.1</capability></capabilities>"
+     SSH_XML+="</hello>]]>]]>"
+     SSH_XML+="<rpc xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\"><close-session/>"
+     SSH_XML+="</rpc>]]>]]>"
+     local SSH_PID=$$
+     eval "sleep ${ODL_TIMEOUT} && ssh -S ${CLI_TMP}/${cli_name}.${SSH_PID} -O exit ${NODE_HOST} &>/dev/null" &>/dev/null &
+     local SSH_KILL=$!
+     local SSH_OUT=""
+     local SSH_RUN=""
+     mk_tmp_file SSH_OUT
+     # method 1 for HighStreet NTS, ZTE, Ericsson
+     NETCONF_METHOD="a"
+     sshpass -p ${NODE_PASS} \
+                             ssh -q \
+                             -o UserKnownHostsFile=/dev/null \
+                             -o StrictHostKeyChecking=no \
+                             -o ConnectTimeout=${ODL_TIMEOUT} \
+                             -o ConnectionAttempts=1 \
+                             -o UpdateHostKeys=no \
+                             -o VerifyHostKeyDNS=no \
+                             -o CheckHostIP=no \
+                             -o TCPKeepAlive=no \
+                             -o RequestTTY=no \
+                             -S ${CLI_TMP}/${cli_name}.${SSH_PID} \
+                             -M \
+                             -p ${NODE_PORT} \
+                             -l ${NODE_USER} \
+                             ${NODE_HOST} \
+                             -s netconf > ${SSH_OUT} 2>&1 <<EOS
+${SSH_XML}
+EOS
+     local SSH_RETVAL=$?
+     #ssh -O check ${NODE_HOST}
+     kill -0 ${SSH_KILL} &>/dev/null
+     if [ $? -eq 0 ] ; then
+       kill -2 ${SSH_KILL} &>/dev/null
+     fi
+     SSH_RUN=$(cat ${SSH_OUT})
+
+     # alternative method for SIAE - forces RequestTTY
+     if [[ -z "${SSH_RUN}" ]] ; then
+       NETCONF_METHOD="b"
+       eval "sleep ${ODL_TIMEOUT} && ssh -S ${CLI_TMP}/${cli_name}.${SSH_PID} -O exit ${NODE_HOST} &>/dev/null" &>/dev/null &
+       SSH_KILL=$!
+       echo "${SSH_XML}" | sshpass -p ${NODE_PASS} \
+                               ssh -q \
+                               -o UserKnownHostsFile=/dev/null \
+                               -o StrictHostKeyChecking=no \
+                               -o ConnectTimeout=${ODL_TIMEOUT} \
+                               -o ConnectionAttempts=1 \
+                               -o UpdateHostKeys=no \
+                               -o VerifyHostKeyDNS=no \
+                               -o CheckHostIP=no \
+                               -o TCPKeepAlive=no \
+                               -o RequestTTY=force \
+                               -S ${CLI_TMP}/${cli_name}.${SSH_PID} \
+                               -M \
+                               -p ${NODE_PORT} \
+                               -l ${NODE_USER} \
+                               ${NODE_HOST} \
+                               -s netconf > ${SSH_OUT} 2>&1 <<EOS
+${SSH_XML}
+EOS
+       SSH_RETVAL=$?
+       kill -0 ${SSH_KILL} &>/dev/null
+       if [ $? -eq 0 ] ; then
+         kill -2 ${SSH_KILL} &>/dev/null
+       fi
+       SSH_RUN=$(cat ${SSH_OUT})
+     fi
+
+     # alternative method for OpenDaylight-style mediators
+     if [[ -z "${SSH_RUN}" ]] ; then
+       NETCONF_METHOD="c"
+       eval "sleep ${ODL_TIMEOUT} && ssh -S ${CLI_TMP}/${cli_name}.${SSH_PID} -O exit ${NODE_HOST} &>/dev/null" &>/dev/null &
+       SSH_KILL=$!
+       sshpass -p ${NODE_PASS} \
+                               ssh -q \
+                               -o UserKnownHostsFile=/dev/null \
+                               -o StrictHostKeyChecking=no \
+                               -o ConnectTimeout=${ODL_TIMEOUT} \
+                               -o ConnectionAttempts=1 \
+                               -o UpdateHostKeys=no \
+                               -o VerifyHostKeyDNS=no \
+                               -o CheckHostIP=no \
+                               -o TCPKeepAlive=no \
+                               -o RequestTTY=force \
+                               -S ${CLI_TMP}/${cli_name}.${SSH_PID} \
+                               -M \
+                               -p ${NODE_PORT} \
+                               -l ${NODE_USER} \
+                               ${NODE_HOST} \
+                               -s netconf > ${SSH_OUT} 2>&1
+       SSH_RETVAL=$?
+       kill -0 ${SSH_KILL} &>/dev/null
+       if [ $? -eq 0 ] ; then
+         kill -2 ${SSH_KILL} &>/dev/null
+       fi
+       SSH_RUN=$(cat ${SSH_OUT})
+     fi
+
+     [[ ${SSH_RUN} =~ "<hello" ]] && NETCONF_HELLO_BEGIN=0
+     [[ ${SSH_RUN} =~ "xmlns:nc=\"urn:ietf:params:xml:ns:netconf:base:" ]] && NETCONF_HELLO_XMLNS=0
+     [[ ${SSH_RUN} =~ "xmlns=\"urn:ietf:params:xml:ns:netconf:base:" ]] && NETCONF_HELLO_XMLNS=0
+     [[ ${SSH_RUN} =~ "<capabilities>" ]] && NETCONF_HELLO_CAP_BEGIN=0
+     [[ ${SSH_RUN} =~ "<capability>" ]] && NETCONF_HELLO_CAPABILITY=0 \
+                                        && mapfile -t LIST_OF_NODE_CAPABILITIES < <( grep -oP "(?<=<capability>)[^<]*" $SSH_OUT)
+     [[ ${SSH_RUN} =~ "</capabilities>" ]] && NETCONF_HELLO_CAP_END=0
+     [[ ${SSH_RUN} =~ "<session-id>" ]] && NETCONF_HELLO_SID_BEGIN=0
+     [[ ${SSH_RUN} =~ "</session-id>" ]] && NETCONF_HELLO_SID_END=0
+     [[ ${SSH_RUN} =~ "</hello>" ]] && NETCONF_HELLO_END=0
+     rm_tmp_file "${SSH_OUT}"
+   fi
+ fi
+
+ case "${NODE_PING}" in
+   0) [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_IP_PING="${TTY_GREEN}ok${TTY_NORMAL}" || NODE_IP_PING="ok" ;;
+ 250) [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_IP_PING="${TTY_AMBER}skipped${TTY_NORMAL}" || NODE_IP_PING="skipped" ;;
+   *) [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_IP_PING="${TTY_RED}fail${TTY_NORMAL}" || NODE_IP_PING="fail" ;;
+ esac
+
+ case "${NODE_SSH_KEYSCAN}" in
+   0) [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_SSH_PING="${TTY_GREEN}ok${TTY_NORMAL}" || NODE_SSH_PING="ok" ;;
+ 250) [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_SSH_PING="${TTY_AMBER}skipped${TTY_NORMAL}" || NODE_SSH_PING="skipped" ;;
+   *) [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_SSH_PING="${TTY_RED}fail${TTY_NORMAL}" || NODE_SSH_PING="fail" ;;
+ esac
+
+  if [[ ${NETCONF_HELLO_BEGIN} -eq 0 && \
+       ${NETCONF_HELLO_XMLNS} -eq 0 && \
+       ${NETCONF_HELLO_CAP_BEGIN} -eq 0 && \
+       ${NETCONF_HELLO_CAPABILITY} -eq 0 && \
+       ${NETCONF_HELLO_CAP_END} -eq 0 && \
+       ${NETCONF_HELLO_SID_BEGIN} -eq 0 && \
+       ${NETCONF_HELLO_SID_END} -eq 0 && \
+       ${NETCONF_HELLO_END} -eq 0 ]] ; then
+   [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_HANDSHAKE="${TTY_GREEN}ok${TTY_NORMAL}" || NODE_HANDSHAKE="ok"
+  elif [[ ${NETCONF_HELLO_BEGIN} -eq 250 && \
+       ${NETCONF_HELLO_XMLNS} -eq 250 && \
+       ${NETCONF_HELLO_CAP_BEGIN} -eq 250 && \
+       ${NETCONF_HELLO_CAPABILITY} -eq 250 && \
+       ${NETCONF_HELLO_CAP_END} -eq 250 && \
+       ${NETCONF_HELLO_SID_BEGIN} -eq 250 && \
+       ${NETCONF_HELLO_SID_END} -eq 250 && \
+       ${NETCONF_HELLO_END} -eq 250 ]] ; then
+   [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_HANDSHAKE="${TTY_AMBER}skipped${TTY_NORMAL}" || NODE_HANDSHAKE="skipped"
+   RETVAL=1
+ else
+   local DETAIL=""
+   [[ ${NETCONF_HELLO_SID_BEGIN} -ne 0 || ${NETCONF_HELLO_SID_END} -ne 0 ]] && DETAIL="<session-id/>"
+   [[ ${NETCONF_HELLO_CAPABILITY} -ne 0 ]] && DETAIL="<capability/>"
+   [[ ${NETCONF_HELLO_CAP_BEGIN} -ne 0 || ${NETCONF_HELLO_CAP_END} -ne 0 ]] && DETAIL="<capabilities/>"
+   [[ ${NETCONF_HELLO_XMLNS} -ne 0 ]] && DETAIL="xmlns"
+   [[ ${NETCONF_HELLO_BEGIN} -ne 0 || ${NETCONF_HELLO_END} -ne 0 ]] && DETAIL="<hello/>"
+   [[ ${CLI_INTERACTIVE} -eq 0 ]] && NODE_HANDSHAKE="${TTY_RED}fail [${DETAIL}]${TTY_NORMAL}" || NODE_HANDSHAKE="fail [${DETAIL}]"
+   RETVAL=1
+ fi
+
+ if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+   echo -e "${NODE_ID}|${NODE_HOST}|${NODE_PORT}|${NODE_IP_PING}|${NODE_SSH_PING}|${NODE_HANDSHAKE} ${TTY_BLUE}#${NETCONF_METHOD}${TTY_NORMAL}"
+ else
+   echo "${NODE_ID}|${NODE_HOST}|${NODE_PORT}|${NODE_IP_PING}|${NODE_SSH_PING}|${NODE_HANDSHAKE} #${NETCONF_METHOD}"
+ fi
+
+ if [ ${NODE_CAPABILITIES} -eq 0 ] ; then
+   echo "[]netconf-capabilities"
+   for ((C = 0; C < ${#LIST_OF_NODE_CAPABILITIES[@]}; ++C)); do
+     echo "${LIST_OF_NODE_CAPABILITIES[$C]}"
+   done
+ fi
+
+ unset LIST_OF_NODE_CAPABILITIES
+ return ${RETVAL}
+}
+
+schemas_list() {
+ local RETVAL=0
+ [[ $# -eq 0 ]] && return 1
+ local HTTP_CODE=""
+ local HTTP_RESPONSE="/dev/null"
+ local NODE_ID="${1,,}"
+ shift
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_OPER_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/ietf-netconf:get"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/xml"
+ local HTTP_ACCEPT="application/yang-data+json"
+ mk_tmp_file HTTP_RESPONSE
+ mk_tmp_file HTTP_BODY
+ cat >${HTTP_BODY} <<SCHEMAS-EOF
+<input xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+    <filter type="subtree">
+        <netconf-state xmlns="urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring">
+            <schemas/>
+        </netconf-state>
+    </filter>
+</input>
+SCHEMAS-EOF
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+     local SCHEMAS=0
+     SCHEMAS=$(jq -r ".\"ietf-netconf:output\".data.\"netconf-state\".schemas.schema | length" ${HTTP_RESPONSE})
+     if [ ${SCHEMAS} -gt 0 ] ; then
+       local SCHEMA=0
+       echo "[]identifier|version|format|namespace|location"
+       while [ ${SCHEMA} -lt ${SCHEMAS} ] ; do
+         local IDENTIFIER=$(jq -r ".\"ietf-netconf:output\".data.\"netconf-state\".schemas.schema[${SCHEMA}].identifier" ${HTTP_RESPONSE})
+         local VERSION=$(jq -r ".\"ietf-netconf:output\".data.\"netconf-state\".schemas.schema[${SCHEMA}].version" ${HTTP_RESPONSE})
+         local FORMAT=$(jq -r ".\"ietf-netconf:output\".data.\"netconf-state\".schemas.schema[${SCHEMA}].format" ${HTTP_RESPONSE})
+         local NAMESPACE=$(jq -r ".\"ietf-netconf:output\".data.\"netconf-state\".schemas.schema[${SCHEMA}].namespace" ${HTTP_RESPONSE})
+         local LOCATION=$(jq -r ".\"ietf-netconf:output\".data.\"netconf-state\".schemas.schema[${SCHEMA}].location" ${HTTP_RESPONSE})
+         echo "${IDENTIFIER}|${VERSION,,}|${FORMAT,,}|${NAMESPACE,,}|${LOCATION}"
+         ((SCHEMA=SCHEMA+1))
+       done
+     fi
+      RETVAL=0
+   else
+      RETVAL=${CURL_HTTP_CODE}
+   fi
+ fi
+ rm_tmp_file "${HTTP_BODY}"
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+schema_fetch() {
+ local RETVAL=0
+ local IDENTIFIER=""
+ local VERSION=""
+ local FORMAT="yang"
+ [[ $# -eq 0 ]] && return 1
+ local NODE_ID="${1,,}"
+ shift
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+    case "${OPTION,,}" in
+      --identifier)
+              shift
+              IDENTIFIER="${1,,}"
+              ;;
+      --version)
+              shift
+              VERSION="${1,,}"
+              ;;
+      --format)
+              shift
+              FORMAT="${1,,}"
+              ;;
+    esac
+    shift
+    OPTION=$1
+   done
+ else
+   RETVAL=1
+   return ${RETVAL}
+ fi
+ [[ -z ${IDENTIFIER} ]] && return 1
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_BODY=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_OPER_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${NODE_ID}/yang-ext:mount/ietf-netconf-monitoring:get-schema"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/xml"
+ local HTTP_ACCEPT="application/xml"
+ mk_tmp_file HTTP_RESPONSE
+ mk_tmp_file HTTP_BODY
+ echo "<input xmlns=\"urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring\">" > ${HTTP_BODY}
+ echo "  <identifier>${IDENTIFIER}</identifier>" >> ${HTTP_BODY}
+ [[ -n "${VERSION}" ]] && echo "  <version>${VERSION}</version>" >> ${HTTP_BODY}
+ [[ -n "${FORMAT}" ]] && echo "  <format>${FORMAT}</format>" >> ${HTTP_BODY}
+ echo "</input>" >> ${HTTP_BODY}
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+     local SCHEMA_SIZE=$(cat ${HTTP_RESPONSE}|wc -l)
+     if [ ${SCHEMA_SIZE} -gt 0 ] ; then
+       cat ${HTTP_RESPONSE}
+       RETVAL=$?
+     else
+       RETVAL=1
+     fi
+   else
+      RETVAL=${CURL_HTTP_CODE}
+   fi
+ fi
+ rm_tmp_file "${HTTP_BODY}"
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+
+schema() {
+  local RETVAL=0
+  case "${1,,}" in
+    help|?)
+      schema_help_list
+      RETVAL=0
+      ;;
+    list)
+      shift
+      schemas_list ${@}
+      RETVAL=$?
+      ;;
+    fetch)
+      shift
+      schema_fetch ${@}
+      RETVAL=$?
+      ;;
+    *)
+      nodes_help_list
+      RETVAL=1
+      ;;
+  esac
+  return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  nodes_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    nodes_help_list
+    RETVAL=0
+    ;;
+  state)
+    shift
+    nodes_state ${@}
+    RETVAL=$?
+    ;;
+  test)
+    shift
+    nodes_test ${@}
+    RETVAL=$?
+    ;;
+  config)
+    shift
+    nodes_config ${@}
+    RETVAL=$?
+    ;;
+  nonconfig)
+    shift
+    nodes_nonconfig ${@}
+    RETVAL=$?
+    ;;
+  list)
+    shift
+    nodes_list ${@}
+    RETVAL=$?
+    ;;
+  export)
+    shift
+    export_nodes ${@}
+    RETVAL=$?
+    ;;
+  status)
+    shift
+    nodes_status ${@}
+    RETVAL=$?
+    ;;
+  mount)
+    shift
+    node_mount ${@}
+    RETVAL=$?
+    ;;
+  unmount)
+    shift
+    nodes_unmount ${@}
+    RETVAL=$?
+    ;;
+  aaa)
+    shift
+    nodes_test_aaa ${@}
+    RETVAL=$?
+    ;;
+  schema)
+    shift
+    schema ${@}
+    RETVAL=$?
+    ;;
+  *)
+    nodes_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}
+

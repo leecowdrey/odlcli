@@ -1,0 +1,47 @@
+#!/bin/bash
+RETVAL=0
+
+if [ $# -eq 0 ] ; then
+  set_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    set_help_list
+    RETVAL=0
+    ;;
+  password|pass)
+    shift
+    set_password "${1}"
+    RETVAL=$?
+    ;;
+  jpass|jpassword)
+    shift
+    set_jolokia_password "${1}"
+    RETVAL=$?
+    ;;
+  juser|jusername)
+    PARAM="${1}"
+    shift
+    set_config "JOLOKIA_USER" "${1}"
+    RETVAL=$?
+    ;;
+  host|port|prefix|timeout|maxtime|user|username|protocol)
+    PARAM="${1}"
+    shift
+    set_config "ODL_${PARAM}" "${@}"
+    RETVAL=$?
+    ;;
+  *)
+    PARAM="${1}"
+    shift
+    if [[ ${PARAM^^} =~ ^ODL_* ]] ; then
+      RETVAL=1
+    else
+      set_config "${PARAM}" "${@}"
+      RETVAL=$?
+    fi
+    ;;
+ esac
+fi
+return ${RETVAL}

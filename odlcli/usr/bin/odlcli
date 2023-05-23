@@ -1,0 +1,39 @@
+#!/bin/bash
+cli_name=${0##*/}
+CLI_VERSION="1.1.0"
+CLI_LIB="/usr/lib/${cli_name,,}"
+CLI_TMP="/tmp"
+CLI_INTERACTIVE=1
+RETVAL=0
+source ${CLI_LIB}/common
+
+#[[ "$-" == *i* || -n "${PS1}" ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ "$-" == *i* || $(tty -s) -eq 0 ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ $- =~ i ]]  && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ -t 0 || -p /dev/stdin ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+[[ -t 0 && -t 1 ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+#[[ -t 0 && -p /dev/stdin && $- =~ i ]] && CLI_INTERACTIVE=0 || CLI_INTERACTIVE=1
+
+configure
+
+trap clean_sigint INT
+
+if [ ${CLI_INTERACTIVE} -eq 1 ] && [ $# -eq 0 ] ; then
+  cli_help
+  RETVAL=$?
+elif [ ${CLI_INTERACTIVE} -eq 0 ] && [ $# -eq 0 ] ; then
+  cli_interactive
+  RETVAL=$?
+elif [ ${CLI_INTERACTIVE} -eq 1 ] && [ $# -gt 0 ] ; then
+  cli_exec "${@}"
+  RETVAL=$?
+elif [ ${CLI_INTERACTIVE} -eq 0 ] && [ $# -gt 0 ] ; then
+  cli_exec "${@}"
+  RETVAL=$?
+else
+  RETVAL=1
+fi
+
+trap - INT
+
+exit ${RETVAL}

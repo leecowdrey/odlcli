@@ -1,0 +1,124 @@
+_complete_odlcli () {
+
+  local cur prev words
+  COMPREPLY=()
+  _get_comp_words_by_ref -n : cur prev words
+
+  # commands
+  cmds="aaa about delete help nodes set show sites stats streams"
+  cmds_help=""
+  cmds_aaa="help domains roles users policies"
+  cmds_aaa_domains="add list delete enable disable"
+  cmds_aaa_domains_add="--description --enable"
+  cmds_aaa_users="add list delete enable disable password"
+  cmds_aaa_users_add="--domain --description --enable --email --password"
+  cmds_aaa_users_list="--domain"
+  cmds_aaa_users_delete="--domain"
+  cmds_aaa_users_enable="--domain"
+  cmds_aaa_users_password="--password --domain"
+  cmds_aaa_roles="add list delete"
+  cmds_aaa_roles_add="--domain"
+  cmds_aaa_roles_list="--domain"
+  cmds_aaa_roles_delete="--domain"
+  cmds_aaa_policies="add list delete"
+  cmds_aaa_policies_add="--get --post --put --patch --delete --insert --append --line --domain --index"
+  cmds_aaa_policies_list="--domain"
+  cmds_aaa_policies_delete="--domain"
+  cmds_delete="help"
+  cmds_delete_help=""
+  cmds_nodes="help aaa list export status mount unmount test state"
+  cmds_nodes_help=""
+  cmds_nodes_list=""
+  cmds_nodes-aaa="--name --password"
+  cmds_nodes_export="--encrypt"
+  cmds_nodes_mount="--host --username --password --encrypted-password --port --tcp-only --cache --cschema --timeout"
+  cmds_nodes_unmount="--all"
+  cmds_nodes_state="--yang-module --extended --timeout --all"
+  cmds_nodes_test="--capabilities --exclude --timeout --all"
+  cmds_nodes_status=""
+  cmds_set="help pass host port prefix timeout maxtime user protocol juser jpass"
+  cmds_set_help=""
+  cmds_set_pass=""
+  cmds_set_host=""
+  cmds_set_port=""
+  cmds_set_timeout=""
+  cmds_set_maxtime=""
+  cmds_set_user=""
+  cmds_set_protocol=""
+  cmds_set_juser=""
+  cmds_set_jpass=""
+  cmds_show="help capability --all pass host port prefix timeout maxtime user protocol juser jpass"
+  cmds_show_help=""
+  cmds_show_all=""
+  cmds_show_pass=""
+  cmds_show_host=""
+  cmds_show_port=""
+  cmds_show_timeout=""
+  cmds_show_maxtime=""
+  cmds_show_user=""
+  cmds_show_protocol=""
+  cmds_show_juser=""
+  cmds_show_jpass=""
+  cmds_sites="help list"
+  cmds_sites_help=""
+  cmds_sites_list=""
+  cmds_stats="help runtime os memory nodecount version"
+  cmds_stats_help=""
+  cmds_stats_runtime=""
+  cmds_stats_os=""
+  cmds_stats_memory=""
+  cmds_stats_nodecount=""
+  cmds_stats_version=""
+  cmds_streams="help bootstrap list monitor"
+  cmds_streams_help=""
+  cmds_streams_bootstrap=""
+  cmds_streams_list="--json-only --xml-only"
+  cmds_streams_monitor="--json"
+
+  # compgen
+  dash=-
+  underscore=_
+  space=" "
+  cmd=""
+  tab=$'\t'
+  words[0]=""
+  completed="${cmds}"
+  for var in "${words[@]:1}"
+  do
+    if [[ ${var} == -* ]] ; then
+      break
+    fi
+    var=${var%$space*}
+    var=${var%$tab*}
+    var=${var%underscore*}
+    if [ -z "${cmd}" ] ; then
+      proposed="${var,,}"
+    else
+      proposed="${cmd,,}_${var,,}"
+    fi
+    local i="cmds_${proposed}"
+    i=${i//$dash/$underscore}
+    local comp="${!i}"
+    if [ -z "${comp}" ] ; then
+      completed=${comp}
+      break
+    fi
+    if [[ ${comp} == -* ]] ; then
+      if [[ ${cur} != -* ]] ; then
+        completed=""
+        break
+      fi
+    fi
+    cmd="${proposed}"
+    completed="${comp}"
+  done
+
+  if [ -z "${completed}" ] ; then
+    COMPREPLY=( $( compgen -f -- "$cur" ) $( compgen -d -- "$cur" ) )
+  else
+    COMPREPLY=( $(compgen -W "${completed}" -- ${cur}) )
+  fi
+  return 0
+}
+
+complete -F _complete_odlcli odlcli

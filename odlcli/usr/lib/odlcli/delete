@@ -1,0 +1,28 @@
+#!/bin/bash
+RETVAL=0
+
+if [ $# -eq 0 ] ; then
+  delete_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    delete_help_list
+    RETVAL=0
+    ;;
+  machine_id|password|host|prefix|port|timeout|maxtime|user|protocol)
+    RETVAL=1
+    ;;
+  *)
+    PARAM="${1}"
+    shift
+    if [[ ${PARAM^^} =~ ^ODL_* ]] ; then
+     RETVAL=1
+    else
+      delete_config "${PARAM}"
+      RETVAL=$?
+    fi
+    ;;
+ esac
+fi
+return ${RETVAL}

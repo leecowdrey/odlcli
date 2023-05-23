@@ -1,0 +1,111 @@
+#!/bin/bash
+RETVAL=0
+
+schema_yang_library() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/yang-library-version"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/yang-data+json"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        echo "[]yang-library-version"
+        local VERSION=$(jq -r ".\"ietf-restconf:yang-library-version\"" ${HTTP_RESPONSE})
+        echo "${VERSION,,}"
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+schema_list() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/ietf-yang-library:modules-state"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/yang-data+json"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local MODULES=$(jq -r ".\"ietf-yang-library:modules-state\".module | length" ${HTTP_RESPONSE})
+        if [ ${MODULES} -gt 0 ] ; then
+          local MODULE=0
+#          echo "[]module-name|revision|namespace|conformance-type|schema|features"
+          echo "[]module-name|revision|namespace|features"
+          while [ ${MODULE} -lt ${MODULES} ] ; do
+           local MODULE_NAME=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].name" ${HTTP_RESPONSE})
+           local REVISION=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].revision" ${HTTP_RESPONSE})
+           local NAMESPACE=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].namespace" ${HTTP_RESPONSE})
+#           local CONFORMANCE_TYPE=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].\"conformance-type\"" ${HTTP_RESPONSE})
+#           local SCHEMA=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].schema" ${HTTP_RESPONSE})
+           local FEATURES=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].feature | length" ${HTTP_RESPONSE})
+           local FEATURES_SET=""
+           if [ ${FEATURES} -gt 0 ] ; then
+             local FEATURE=0
+             local FEATURE_IDX=0
+             while [ ${FEATURE} -lt ${FEATURES} ] ; do
+               local FEATURE_NAME=$(jq -r ".\"ietf-yang-library:modules-state\".module[${MODULE}].feature[${FEATURE}]" ${HTTP_RESPONSE})
+               ((FEATURE_IDX=FEATURE+1))
+               [[ ${FEATURE_IDX} -lt ${FEATURES} ]] && FEATURES_SET+="${FEATURE_NAME}," || FEATURES_SET+="${FEATURE_NAME}"
+               ((FEATURE=FEATURE+1))
+             done
+           fi
+#           echo "${MODULE_NAME,,}|${REVISION,,}|${NAMESPACE,,}|${CONFORMANCE_TYPE,,}|${SCHEMA,,}|${FEATURES_SET}"
+           echo "${MODULE_NAME,,}|${REVISION,,}|${NAMESPACE,,}|${FEATURES_SET}"
+           ((MODULE=MODULE+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+
+if [ $# -eq 0 ] ; then
+  schema_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    schema_help_list
+    RETVAL=0
+    ;;
+  library)
+    schema_yang_library
+    RETVAL=$?
+    ;;
+  list)
+    shift
+    schema_list ${@}
+    RETVAL=$?
+    ;;
+  *)
+    schema_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}
+

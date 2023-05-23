@@ -1,0 +1,58 @@
+#!/bin/bash
+RETVAL=0
+
+restconf_get() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ if [ $# -eq 0 ] ; then
+   query_help_list
+   RETVAL=1
+   return ${RETVAL}
+ fi
+ local HTTP_PATH=""
+ [[ "${1}" =~ "${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/" ]] && HTTP_PATH="${1}" || HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}${1}"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="application/yang-data+json"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        cat ${HTTP_RESPONSE}
+        RETVAL=0
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  query_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    query_help_list
+    RETVAL=0
+    ;;
+  get)
+    shift
+    restconf_get ${@}
+    RETVAL=$?
+    ;;
+  *)
+    query_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+
+return ${RETVAL}

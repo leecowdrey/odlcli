@@ -1,0 +1,107 @@
+#!/bin/bash
+RETVAL=0
+
+version_list() {
+  local RETVAL=0
+  echo "${CLI_VERSION}"
+  return ${RETVAL}
+}
+
+restconf_capabilities() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/ietf-restconf-monitoring:restconf-state/capabilities"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/json"
+ local HTTP_ACCEPT="application/json"
+ local CAAPS=0
+ local URN_IETF_PREFIX="urn:ietf:params:restconf:capability:"
+ local URN_ODL_PREFIX="urn:opendaylight:params:restconf:capability:"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        CAPAS=$(jq -r ".\"ietf-restconf-monitoring:capabilities\".capability | length" ${HTTP_RESPONSE})
+        if [ ${CAPAS} -gt 0 ] ; then
+          echo "[]capability|version"
+          local CAPA=0
+          while [ ${CAPA} -lt ${CAPAS} ] ; do
+            local CAPABILITY=$(jq -r ".\"ietf-restconf-monitoring:capabilities\".capability[${CAPA}]" ${HTTP_RESPONSE})
+            CAPABILITY=${CAPABILITY/#$URN_IETF_PREFIX/}
+            CAPABILITY=${CAPABILITY/#$URN_ODL_PREFIX/}
+            local VERSION=${CAPABILITY#*:}
+            CAPABILITY=${CAPABILITY%%:*}
+            CAPABILITY=${CAPABILITY//-/_}
+            echo "[${CAPA}]${CAPABILITY}|${VERSION}"
+            ((CAPA=CAPA+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  show_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    show_help_list
+    RETVAL=0
+    ;;
+  version)
+    version_list
+    RETVAL=$?
+    ;;
+  jpass|jpassword)
+    PARAM="${1}"
+    shift
+    show_config "JOLOKIA_PASSWORD" "${@}"
+    RETVAL=$?
+    ;;
+  juser)
+    PARAM="${1}"
+    shift
+    show_config "JOLOKIA_USER" "${@}"
+    RETVAL=$?
+    ;;
+  host|port|prefix|timeout|maxtime|user|pass|password|protocol)
+    PARAM="${1}"
+    shift
+    show_config "ODL_${PARAM}" "${@}"
+    RETVAL=$?
+    ;;
+  capability)
+    shift
+    restconf_capabilities
+    RETVAL=$?
+    ;;
+  --all)
+    shift
+    show_config_all "${@}"
+    RETVAL=$?
+    ;;
+  *)
+    PARAM="${1}"
+    shift
+    if [[ ${PARAM^^} =~ ^ODL_* ]] ; then
+      RETVAL=1
+    else
+      show_config "${PARAM}" "${@}"
+      RETVAL=$?
+    fi
+    ;;
+ esac
+fi
+
+return ${RETVAL}

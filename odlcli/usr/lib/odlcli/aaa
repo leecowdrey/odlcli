@@ -1,0 +1,1586 @@
+#!/bin/bash
+RETVAL=0
+declare -a LIST_OF_DOMAINS
+declare -a LIST_OF_USERS
+declare -a LIST_OF_ROLES
+declare -a LIST_OF_POLICIES
+declare -a LIST_OF_POLICY_RESOURCES
+
+get_keystore() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/aaa-cert-mdsal:key-stores"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        cat ${HTTP_RESPONSE}
+      fi
+      RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+get_roles() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/auth/v1/roles"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+   DOMAIN_NAME="${1}"
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local ROLES=$(jq -r ".roles | length" ${HTTP_RESPONSE})
+        if [ ${ROLES} -gt 0 ] ; then
+          local ROLE=0
+          while [ ${ROLE} -lt ${ROLES} ] ; do
+           local NAME=$(jq -r ".roles[${ROLE}].name" ${HTTP_RESPONSE})
+           local DOMAINID=$(jq -r ".roles[${ROLE}].domainid" ${HTTP_RESPONSE})
+           if [ "${DOMAIN_NAME,,}" == "${DOMAINID,,}" ] ; then
+             LIST_OF_ROLES+=(${NAME})
+           fi
+           ((ROLE=ROLE+1))
+          done
+        fi
+      fi
+      RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+get_user_roles() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+   USER_DOMAIN_NAME="${1}"
+ fi
+ local HTTP_PATH="/auth/v1/domains/sdn/users/${USER_DOMAIN_NAME}/roles"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local ROLES=$(jq -r ".roles | length" ${HTTP_RESPONSE})
+        if [ ${ROLES} -gt 0 ] ; then
+          local ROLE=0
+          while [ ${ROLE} -lt ${ROLES} ] ; do
+           local NAME=$(jq -r ".roles[${ROLE}].name" ${HTTP_RESPONSE})
+           local DOMAINID=$(jq -r ".roles[${ROLE}].domainid" ${HTTP_RESPONSE})
+           if [ "${DOMAIN_NAME,,}" == "${DOMAINID,,}" ] ; then
+             LIST_OF_ROLES+=(${NAME})
+           fi
+           ((ROLE=ROLE+1))
+          done
+        fi
+      fi
+      RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+get_users() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/auth/v1/users"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+   DOMAIN_NAME="${1}"
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local USERS=$(jq -r ".users | length" ${HTTP_RESPONSE})
+        if [ ${USERS} -gt 0 ] ; then
+          local USER=0
+          while [ ${USER} -lt ${USERS} ] ; do
+           local NAME=$(jq -r ".users[${USER}].name" ${HTTP_RESPONSE})
+           local DOMAINID=$(jq -r ".users[${USER}].domainid" ${HTTP_RESPONSE})
+           if [ "${DOMAIN_NAME,,}" == "${DOMAINID,,}" ] ; then
+             LIST_OF_USERS+=(${NAME})
+           fi
+           ((USER=USER+1))
+          done
+        fi
+      fi
+      RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+add_domain() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local DOMAIN_NAME="${1}"
+  shift
+  if [ "${DOMAIN_NAME,,}" == "${AAA_DEFAULT_DOMAIN,,}" ] ; then
+   RETVAL=2
+   return ${RETVAL}
+  fi
+  local DOMAIN_DESCRIPTION=""
+  local DOMAIN_ENABLED="false"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}" 
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --description)
+              shift
+              DOMAIN_DESCRIPTION="${1}"
+              ;;
+        --enable)
+              DOMAIN_ENABLED="true"
+              ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  local HTTP_CODE=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/domains"
+  local HTTP_BODY=""
+  mk_tmp_file HTTP_BODY
+  cat >${HTTP_BODY} <<EOF
+{ "name": "${DOMAIN_NAME}", "description": "${DOMAIN_DESCRIPTION}", "enabled": ${DOMAIN_ENABLED,,} }
+EOF
+  local HTTP_METHOD="POST"
+  local HTTP_CONTENT_TYPE="*/*"
+  local HTTP_ACCEPT="*/*"
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${DOMAIN_NAME}|added"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+delete_domain() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local DOMAIN_NAME="${1}"
+  delete_roles_by_domain "${DOMAIN_NAME}"
+  RETVAL=$?
+  if [ ${RETVAL} -eq 0 ] ; then
+    delete_users_by_domain "${DOMAIN_NAME}"
+    RETVAL=$?
+  fi
+  if [ ${RETVAL} -eq 0 ] ; then
+    if [ "${DOMAIN_NAME,,}" == "${AAA_DEFAULT_DOMAIN,,}" ] ; then
+      RETVAL=2
+    else
+      local HTTP_CODE=""
+      local HTTP_BODY="/dev/null"
+      local HTTP_RESPONSE="/dev/null"
+      local HTTP_PATH="/auth/v1/domains/${DOMAIN_NAME,,}"
+      local HTTP_METHOD="DELETE"
+      local HTTP_CONTENT_TYPE="*/*"
+      local HTTP_ACCEPT="*/*"
+      http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+      if [ ${CURL_RETVAL} -eq 0 ] ; then
+        if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+           echo "${DOMAIN_NAME}|deleted"
+           RETVAL=0
+        else
+           RETVAL=${CURL_HTTP_CODE}
+        fi
+      else
+        RETVAL=${CURL_RETVAL}
+      fi
+    fi
+  fi
+  return ${RETVAL}
+}
+
+disable_domain() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local DOMAIN_NAME="${1}"
+  local HTTP_CODE=""
+  local HTTP_BODY=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/domains/${DOMAIN_NAME,,}"
+  local HTTP_METHOD="PUT"
+  local HTTP_CONTENT_TYPE="*/*"
+  local HTTP_ACCEPT="*/*"
+   mk_tmp_file HTTP_BODY
+   cat >${HTTP_BODY} <<EOF
+{ "enabled": false }
+EOF
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${DOMAIN_NAME}|disabled"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+enable_domain() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local DOMAIN_NAME="${1}"
+  local HTTP_CODE=""
+  local HTTP_BODY=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/domains/${DOMAIN_NAME,,}"
+  local HTTP_METHOD="PUT"
+  local HTTP_CONTENT_TYPE="*/*"
+  local HTTP_ACCEPT="*/*"
+   mk_tmp_file HTTP_BODY
+   cat >${HTTP_BODY} <<EOF
+{ "enabled": true }
+EOF
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${DOMAIN_NAME}|enabled"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+delete_roles_by_domain() {
+  local RETVAL=0
+  unset LIST_OF_ROLES
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    DOMAIN_NAME="${1}"
+  fi
+  get_roles "${DOMAIN_NAME}"
+  RETVAL=$?
+  if [ ${RETVAL} -eq 0 ] ; then
+    for ((I = 0; I < ${#LIST_OF_ROLES[@]}; ++I)); do
+       delete_role ${LIST_OF_ROLES[$I]} --domain ${DOMAIN_NAME}
+    done
+  fi
+  unset LIST_OF_ROLES
+  return ${RETVAL}
+}
+
+delete_users_by_domain() {
+  local RETVAL=0
+  unset LIST_OF_USERS
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    DOMAIN_NAME="${1}"
+  fi
+  get_users "${DOMAIN_NAME}"
+  RETVAL=$?
+  if [ ${RETVAL} -eq 0 ] ; then
+    for ((I = 0; I < ${#LIST_OF_USERS[@]}; ++I)); do
+       delete_user ${LIST_OF_USERS[$I]} --domain ${DOMAIN_NAME}
+    done
+  fi
+  unset LIST_OF_USERS
+  return ${RETVAL}
+}
+
+list_domains() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/auth/v1/domains"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local ITEMS=0
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        ITEMS=$(jq -r ".domains | length" ${HTTP_RESPONSE})
+        echo "[]domain-name|description|enabled"
+        if [ ${ITEMS} -gt 0 ] ; then
+          local ITEM=0
+          while [ ${ITEM} -lt ${ITEMS} ] ; do
+           local DOMAINID=$(jq -r ".domains[${ITEM}].domainid" ${HTTP_RESPONSE})
+           local NAME=$(jq -r ".domains[${ITEM}].name" ${HTTP_RESPONSE})
+           local DESCRIPTION=$(jq -r ".domains[${ITEM}].description" ${HTTP_RESPONSE})
+           local ENABLED=$(jq -r ".domains[${ITEM}].enabled" ${HTTP_RESPONSE})
+           echo "${NAME}|${DESCRIPTION}|${ENABLED}"
+           ((ITEM=ITEM+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+add_role() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain) shift
+                  DOMAIN_NAME="${1}"
+                  ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  local HTTP_CODE=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/roles"
+  local HTTP_BODY=""
+  mk_tmp_file HTTP_BODY
+  cat >${HTTP_BODY} <<EOF
+{ "name": "${NAME,,}", "description": "${DESCRIPTION}", "domainid": "${DOMAIN_NAME}" }
+EOF
+  local HTTP_METHOD="POST"
+  local HTTP_CONTENT_TYPE="*/*"
+  local HTTP_ACCEPT="*/*"
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${NAME}@${DOMAIN_NAME}|added"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+delete_policies_by_role() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+    aaa_help_list
+    RETVAL=1
+    return ${RETVAL}
+  fi
+  local ROLE_NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain)
+                       shift
+                       DOMAIN_NAME="${1}"
+                       ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  unset LIST_OF_POLICIES
+  unset LIST_OF_POLICY_RESOURCES
+  get_policies
+  RETVAL=$?
+  if [ ${RETVAL} -eq 0 ] ; then
+    if [ ${#LIST_OF_POLICIES[@]} -gt 0 ] ; then
+      local TMP_POLICIES=""
+      mk_tmp_file TMP_POLICIES
+      for ((I = 0; I < ${#LIST_OF_POLICIES[@]}; ++I)); do
+        echo "${LIST_OF_POLICIES[$I]}" >> ${TMP_POLICIES}
+      done
+      get_list_of_policy_resources ${TMP_POLICIES}
+      RETVAL=$?
+      if [ ${RETVAL} -eq 0 ] ; then
+        for ((I = 0; I < ${#LIST_OF_POLICY_RESOURCES[@]}; ++I)); do
+          delete_policy "${LIST_OF_POLICY_RESOURCES[$I]}" --domain ${DOMAIN_NAME} > /dev/null 2>&1
+          RETVAL=$?
+          if [ ! ${RETVAL} -eq 0 ] ; then
+            break
+          fi
+        done
+        sed -i "/|${ROLE_NAME}|/Id" ${TMP_POLICIES}
+        RETVAL=$?
+        if [ ${#LIST_OF_POLICY_RESOURCES[@]} -gt 0 ] ; then
+          rebuild_policies ${TMP_POLICIES} --domain ${DOMAIN_NAME}
+          RETVAL=$?
+        fi
+      fi
+      rm_tmp_file ${TMP_POLICIES}
+    fi
+  fi
+  unset LIST_OF_POLICIES
+  unset LIST_OF_POLICY_RESOURCES
+  return ${RETVAL}
+}
+
+delete_role() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local ROLE_NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain) shift
+                  DOMAIN_NAME="${1}"
+                  ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  if [ "${ROLE_NAME,,}@${DOMAIN_NAME,,}" == "${ODL_AAA_DEFAULT_ADMIN_ROLE,,}@${ODL_AAA_DEFAULT_DOMAIN,,}" ] || [ "${ROLE_NAME,,}@${DOMAIN_NAME,,}" == "${ODL_AAA_DEFAULT_USER_ROLE,,}@${ODL_AAA_DEFAULT_DOMAIN,,}" ] ; then
+    RETVAL=2
+  else
+    delete_policies_by_role "${ROLE_NAME}" --domain ${DOMAIN_NAME}
+    RETVAL=$?
+    if [ ${RETVAL} -eq 0 ] ; then
+      local HTTP_CODE=""
+      local HTTP_BODY="/dev/null"
+      local HTTP_RESPONSE=""
+      local HTTP_PATH="/auth/v1/roles/${ROLE_NAME,,}@${DOMAIN_NAME,,}"
+      local HTTP_METHOD="DELETE"
+      local HTTP_CONTENT_TYPE="application/json"
+      local HTTP_ACCEPT="application/json"
+      mk_tmp_file HTTP_RESPONSE
+      http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+      if [ ${CURL_RETVAL} -eq 0 ] ; then
+        if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+           echo "${ROLE_NAME}@${DOMAIN_NAME}|deleted"
+           RETVAL=0
+        else
+           RETVAL=${CURL_HTTP_CODE}
+        fi
+      else
+        RETVAL=${CURL_RETVAL}
+      fi
+      rm_tmp_file "${HTTP_RESPONSE}"
+    fi
+  fi
+  return ${RETVAL}
+}
+
+list_roles() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/auth/v1/roles"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local ITEMS=0
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --domain) shift
+                 DOMAIN_NAME="${1}"
+                 ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        ITEMS=$(jq -r ".roles | length" ${HTTP_RESPONSE})
+        echo "[]role-name|description|domain-name"
+        if [ ${ITEMS} -gt 0 ] ; then
+          local ITEM=0
+          while [ ${ITEM} -lt ${ITEMS} ] ; do
+           local ROLEID=$(jq -r ".roles[${ITEM}].roleid" ${HTTP_RESPONSE})
+           local NAME=$(jq -r ".roles[${ITEM}].name" ${HTTP_RESPONSE})
+           local DESCRIPTION=$(jq -r ".roles[${ITEM}].description" ${HTTP_RESPONSE})
+           local DOMAINID=$(jq -r ".roles[${ITEM}].domainid" ${HTTP_RESPONSE})
+           if [ "${DOMAINID,,}" == "${DOMAIN_NAME,,}" ] ; then
+             echo "${NAME}|${DESCRIPTION}|${DOMAINID}"
+           fi
+           ((ITEM=ITEM+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+add_user() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  local DESCRIPTION=""
+  local ENABLED=0
+  local EMAIL=""
+  local PASSWORD=""
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain)
+                       shift
+                       DOMAIN_NAME="${1}"
+                       ;;
+        --description) 
+                       shift
+                       DESCRIPTION="${1}"
+                       ;;
+        --enable) 
+                       ENABLED=1
+                       ;;
+        --email)
+                       shift
+                       EMAIL="${1}"
+                       ;;
+        --password)
+                       shift
+                       PASSWORD="${1}"
+                       ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  local HTTP_CODE=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/users"
+  local HTTP_BODY=""
+  mk_tmp_file HTTP_BODY
+  cat >${HTTP_BODY} <<EOF
+{ "name": "${NAME,,}", "description": "${DESCRIPTION}", "enabled": ${ENABLED}, "email": "${EMAIL,,}", "password": "${PASSWORD}", "domainid": "${DOMAIN_NAME}" }
+EOF
+  local HTTP_METHOD="POST"
+  local HTTP_CONTENT_TYPE="*/*"
+  local HTTP_ACCEPT="*/*"
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${NAME}@${DOMAIN_NAME}:added"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+delete_user() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain)
+                       shift
+                       DOMAIN_NAME="${1}"
+                       ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  if [ "${NAME,,}@${DOMAIN_NAME,,}" == "${ODL_AAA_DEFAULT_USER,,}@${ODL_AAA_DEFAULT_DOMAIN,,}" ] ; then
+    RETVAL=2
+  else
+    local HTTP_CODE=""
+    local HTTP_RESPONSE="/dev/null"
+    local HTTP_PATH="/auth/v1/users/${NAME}@${DOMAIN_NAME}"
+    local HTTP_BODY="/dev/null"
+    local HTTP_METHOD="DELETE"
+    local HTTP_CONTENT_TYPE="*/*"
+    local HTTP_ACCEPT="*/*"
+    http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+    if [ ${CURL_RETVAL} -eq 0 ] ; then
+      if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+         echo "${NAME}@${DOMAIN_NAME}:deleted"
+         RETVAL=0
+      else
+         RETVAL=${CURL_HTTP_CODE}
+      fi
+    else
+      RETVAL=${CURL_RETVAL}
+    fi
+  fi
+  return ${RETVAL}
+}
+
+list_users() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/auth/v1/users"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local ITEMS=0
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --domain) shift
+                 DOMAIN_NAME="${1}"
+                 ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        ITEMS=$(jq -r ".users | length" ${HTTP_RESPONSE})
+        echo "[]username|description|enabled|email|domain-name|granted-roles"
+        if [ ${ITEMS} -gt 0 ] ; then
+          local ITEM=0
+          while [ ${ITEM} -lt ${ITEMS} ] ; do
+           local USERID=$(jq -r ".users[${ITEM}].userid" ${HTTP_RESPONSE})
+           local USERNAME=$(jq -r ".users[${ITEM}].name" ${HTTP_RESPONSE})
+           local DESCRIPTION=$(jq -r ".users[${ITEM}].description" ${HTTP_RESPONSE})
+           local ENABLED=$(jq -r ".users[${ITEM}].enabled" ${HTTP_RESPONSE})
+           [[ ${ENABLED} -eq 0 ]] && ENABLED="false" || ENABLED="true"
+           local EMAIL=$(jq -r ".users[${ITEM}].email" ${HTTP_RESPONSE})
+           local DOMAINID=$(jq -r ".users[${ITEM}].domainid" ${HTTP_RESPONSE})
+           unset LIST_OF_ROLES
+           if [ "${DOMAIN_NAME,,}" == "${DOMAINID,,}" ] ; then
+             local RECORD="${USERNAME}|${DESCRIPTION}|${ENABLED}|${EMAIL}|${DOMAINID}|"
+             get_user_roles ${USERID}
+             if [ $? -eq 0 ] ; then
+               local ALINENO=0
+               for ((I = 0; I < ${#LIST_OF_ROLES[@]}; ++I)); do
+                 ((ALINENO=ALINENO+1))
+                 RECORD+="${LIST_OF_ROLES[$I]}"
+                 if [ ${ALINENO} -lt ${#LIST_OF_ROLES[@]} ] ; then
+                    RECORD+=","
+                 fi
+               done
+               unset LIST_OF_ROLES
+             fi
+             echo "${RECORD}"
+           fi
+           ((ITEM=ITEM+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+disable_user() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain)
+                       shift
+                       DOMAIN_NAME="${1}"
+                       ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  local HTTP_CODE=""
+  local HTTP_BODY=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/users/${NAME}@${DOMAIN_NAME}"
+  local HTTP_METHOD="PUT"
+  local HTTP_CONTENT_TYPE="application/json"
+  local HTTP_ACCEPT="application/json"
+   mk_tmp_file HTTP_BODY
+   cat >${HTTP_BODY} <<EOF
+{ "enabled": 0 }
+EOF
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${NAME}@${DOMAIN_NAME}|disabled"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+enable_user() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local NAME="${1}"
+  shift
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --domain)
+                       shift
+                       DOMAIN_NAME="${1}"
+                       ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  local HTTP_CODE=""
+  local HTTP_BODY=""
+  local HTTP_RESPONSE=""
+  local HTTP_PATH="/auth/v1/users/${NAME}@${DOMAIN_NAME}"
+  local HTTP_METHOD="PUT"
+  local HTTP_CONTENT_TYPE="application/json"
+  local HTTP_ACCEPT="application/json"
+   mk_tmp_file HTTP_BODY
+   cat >${HTTP_BODY} <<EOF
+{ "enabled": 1 }
+EOF
+  mk_tmp_file HTTP_RESPONSE
+  http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+  if [ ${CURL_RETVAL} -eq 0 ] ; then
+    if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+       echo "${NAME}@${DOMAIN_NAME}|enabled"
+       RETVAL=0
+    else
+       RETVAL=${CURL_HTTP_CODE}
+    fi
+  else
+    RETVAL=${CURL_RETVAL}
+  fi
+  rm_tmp_file "${HTTP_RESPONSE}"
+  rm_tmp_file "${HTTP_BODY}"
+  return ${RETVAL}
+}
+
+password_user() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   aaa_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  local NAME="${1}"
+  shift
+  local PASSWORD=""
+  local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --password)
+                       shift
+                       PASSWORD="${1}"
+                       ;;
+        --domain)
+                       shift
+                       DOMAIN_NAME="${1}"
+                       ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  if [ -z "${PASSWORD}" ] ; then
+    RETVAL=1
+  else
+    local HTTP_CODE=""
+    local HTTP_BODY=""
+    local HTTP_RESPONSE=""
+    local HTTP_PATH="/auth/v1/users/${NAME}@${DOMAIN_NAME}"
+    local HTTP_METHOD="PUT"
+    local HTTP_CONTENT_TYPE="application/json"
+    local HTTP_ACCEPT="application/json"
+     mk_tmp_file HTTP_BODY
+     cat >${HTTP_BODY} <<EOF
+{ "password": "${PASSWORD}" }
+EOF
+    mk_tmp_file HTTP_RESPONSE
+    http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+    if [ ${CURL_RETVAL} -eq 0 ] ; then
+      if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+         echo "${NAME}@${DOMAIN_NAME}|password set"
+         RETVAL=0
+      else
+         RETVAL=${CURL_HTTP_CODE}
+      fi
+    else
+      RETVAL=${CURL_RETVAL}
+    fi
+    rm_tmp_file "${HTTP_RESPONSE}"
+    rm_tmp_file "${HTTP_BODY}"
+  fi
+  return ${RETVAL}
+}
+
+get_list_of_policy_resources() {
+  local RETVAL=0
+  unset LIST_OF_POLICY_RESOURCES
+  local PREVIOUS_RESOURCE=""
+  while IFS= read -r LINE ; do
+    local TMP_RESOURCE=$(echo -n "${LINE}" | cut -d"|" -f1)
+    if [ "${TMP_RESOURCE,,}" != "${PREVIOUS_RESOURCE,,}" ] ; then
+      LIST_OF_POLICY_RESOURCES+=("${TMP_RESOURCE}")
+      PREVIOUS_RESOURCE="${TMP_RESOURCE}"
+    fi
+  done < ${1}
+  RETVAL=$?
+  return ${RETVAL}
+}
+
+rebuild_policies() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  aaa_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local TMP_POLICIES="${1}"
+ shift
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --domain)
+                      shift
+                      DOMAIN_NAME="${1}"
+                      ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+
+ unset LIST_OF_POLICIES
+ if [ ${RETVAL} -eq 0 ] ; then
+   readarray -t LIST_OF_POLICIES < ${TMP_POLICIES}
+   RETVAL=$?
+ fi
+
+ unset LIST_OF_POLICY_RESOURCES
+ get_list_of_policy_resources ${TMP_POLICIES}
+ RETVAL=$?
+
+ if [ ${RETVAL} -eq 0 ] ; then
+   if [ ${#LIST_OF_POLICY_RESOURCES[@]} -gt 0 ] ; then
+     for ((I = 0; I < ${#LIST_OF_POLICY_RESOURCES[@]}; ++I)); do
+       local TMP_ACTIONS=""
+       mk_tmp_file TMP_ACTIONS
+       grep -F -i "${LIST_OF_POLICY_RESOURCES[$I]}|" ${TMP_POLICIES} | cut -d"|" -f2,3,4,5,6,7,8 > ${TMP_ACTIONS}
+       local ALINES=$(cat ${TMP_ACTIONS}|wc -l)
+       local HTTP_BODY=""
+       mk_tmp_file HTTP_BODY
+       echo -n "{ \"aaa:policies\": [ { \"aaa:resource\": \"${LIST_OF_POLICY_RESOURCES[$I]}\", \"aaa:permissions\": [" > ${HTTP_BODY}
+       local LINENO=0
+       while IFS= read -r LINE ; do
+         ((LINENO=LINENO+1))
+         declare -a LIST_OF_ACTIONS
+         local ROLE_NAME=$(echo -n "${LINE}" | cut -d"|" -f1)
+         [[ $(echo -n "${LINE,,}" | cut -d"|" -f2) == "true" ]] && LIST_OF_ACTIONS+=("get")
+         [[ $(echo -n "${LINE,,}" | cut -d"|" -f3) == "true" ]] && LIST_OF_ACTIONS+=("put")
+         [[ $(echo -n "${LINE,,}" | cut -d"|" -f4) == "true" ]] && LIST_OF_ACTIONS+=("patch")
+         [[ $(echo -n "${LINE,,}" | cut -d"|" -f5) == "true" ]] && LIST_OF_ACTIONS+=("delete")
+         [[ $(echo -n "${LINE,,}" | cut -d"|" -f6) == "true" ]] && LIST_OF_ACTIONS+=("post")
+         echo -n " { \"aaa:role\": \"${ROLE_NAME}\", \"aaa:actions\": [" >> ${HTTP_BODY}
+         local ALINENO=0
+         for ((A = 0; A < ${#LIST_OF_ACTIONS[@]}; ++A)); do
+           ((ALINENO=ALINENO+1))
+           echo -n "\"${LIST_OF_ACTIONS[$A]}\"" >> ${HTTP_BODY}
+           if [ ${ALINENO} -lt ${#LIST_OF_ACTIONS[@]} ] ; then
+            echo -n "," >> ${HTTP_BODY}
+           fi
+         done
+         unset LIST_OF_ACTIONS
+         echo -n "]}" >> ${HTTP_BODY}
+         if [ ${LINENO} -lt ${ALINES} ] ; then
+          echo -n "," >> ${HTTP_BODY}
+         fi
+       done < ${TMP_ACTIONS}
+       echo "]}]}" >> ${HTTP_BODY}
+       rm_tmp_file ${TMP_ACTIONS}
+       local HTTP_CODE=""
+       local HTTP_RESPONSE="/dev/null"
+       url_encode "${LIST_OF_POLICY_RESOURCES[$I]}"
+       local HTTP_PATH="${ODL_PREFIX}/config/aaa:http-authorization/policies/policies/${ENCODED_URL}"
+       local HTTP_METHOD="PUT"
+       local HTTP_CONTENT_TYPE="application/json"
+       local HTTP_ACCEPT="application/json"
+       http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+       if [ ${CURL_RETVAL} -eq 0 ] ; then
+         if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+          #echo "${LIST_OF_POLICY_RESOURCES[$I]}|added"
+          RETVAL=0
+        else
+          RETVAL=${CURL_RETVAL}
+        fi
+       else
+         RETVAL=${CURL_RETVAL}
+       fi
+       rm_tmp_file ${HTTP_BODY}
+     done
+   else
+     RETVAL=1
+   fi
+ fi
+ unset LIST_OF_POLICIES
+ unset LIST_OF_POLICY_RESOURCES
+ return ${RETVAL}
+}
+
+add_policy() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  aaa_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local RESOURCE="${1}"
+ shift
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ local ROLE_NAME=""
+ local ACTION_GET="false"
+ local ACTION_POST="false"
+ local ACTION_PUT="false"
+ local ACTION_PATCH="false"
+ local ACTION_DELETE="false"
+ local INDEX=10
+ local MODE_INSERT=1
+ local MODE_APPEND=2
+ local LINENO=0
+ local MODE=${MODE_APPEND}
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --domain)
+                      shift
+                      DOMAIN_NAME="${1}"
+                      ;;
+       --role)
+                      shift
+                      ROLE_NAME="${1}"
+                      ;;
+       --index)
+                      shift
+                      INDEX=${1}
+                      ;;
+       --get)
+                      ACTION_GET="true"
+                      ;;
+       --post)
+                      ACTION_POST="true"
+                      ;;
+       --put)
+                      ACTION_PUT="true"
+                      ;;
+       --patch)
+                      ACTION_PATCH="true"
+                      ;;
+       --delete)
+                      ACTION_DELETE="true"
+                      ;;
+       --insert)
+                      MODE=${MODE_INSERT}
+                      ;;
+       --line)
+                      shift
+                      LINENO=${1}
+                      ;;
+       --append)
+                      MODE=${MODE_APPEND}
+                      ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+ get_policies
+ RETVAL=$?
+ if [ ${RETVAL} -eq 0 ] ; then
+   local TMP_POLICIES=""
+   mk_tmp_file TMP_POLICIES
+   for ((I = 0; I < ${#LIST_OF_POLICIES[@]}; ++I)); do
+     echo "${LIST_OF_POLICIES[$I]}" >> ${TMP_POLICIES}
+   done
+   get_list_of_policy_resources ${TMP_POLICIES}
+   RETVAL=$?
+   for ((I = 0; I < ${#LIST_OF_POLICY_RESOURCES[@]}; ++I)); do
+    delete_policy "${LIST_OF_POLICY_RESOURCES[$I]}" --domain ${DOMAIN_NAME} > /dev/null 2>&1
+    RETVAL=$?
+    if [ ! ${RETVAL} -eq 0 ] ; then
+     break
+    fi
+   done
+   local NEW_ENTRY="${RESOURCE,,}|${INDEX}|${ROLE_NAME,,}|${ACTION_GET,,}|${ACTION_PUT,,}|${ACTION_PATCH,,}|${ACTION_DELETE,,}|${ACTION_POST,,}"
+   if [ ${#LIST_OF_POLICIES[@]} -eq 0 ] ; then
+     echo "${NEW_ENTRY}" > ${TMP_POLICIES}
+   else
+     if [ ${MODE} -eq ${MODE_INSERT} ] ; then
+      if [ ${LINENO} -gt 0 ] && [ ${LINENO} -le ${#LIST_OF_POLICIES[@]} ] ; then
+       sed -i "${LINENO} i ${NEW_ENTRY}" ${TMP_POLICIES}
+       RETVAL=$?
+      else
+       sed -i "1 i ${NEW_ENTRY}" ${TMP_POLICIES}
+       RETVAL=$?
+      fi
+     else
+       if [ ${LINENO} -gt 0 ] && [ ${LINENO} -le ${EXISTING_ENTRIES} ] ; then
+         sed -i "${LINENO} a ${NEW_ENTRY}" ${TMP_POLICIES}
+         RETVAL=$?
+      else
+         sed -i "\$ a ${NEW_ENTRY}" ${TMP_POLICIES}
+         RETVAL=$?
+      fi
+     fi
+     rebuild_policies ${TMP_POLICIES} --domain ${DOMAIN_NAME}
+     RETVAL=$?
+   fi
+   rm_tmp_file ${TMP_POLICIES}
+ fi
+ unset LIST_OF_POLICIES
+ unset LIST_OF_POLICY_RESOURCES
+ return ${RETVAL}
+}
+
+delete_policy() {
+ local RETVAL=0
+ if [ $# -eq 0 ] ; then
+  aaa_help_list
+  RETVAL=1
+  return ${RETVAL}
+ fi
+ local RESOURCE="${1}"
+ shift
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ local ROLE_NAME=""
+ local LINENO=0
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --domain)
+                      shift
+                      DOMAIN_NAME="${1}"
+                      ;;
+       --role)
+                      shift
+                      ROLE_NAME="${1}"
+                      ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+ get_policies
+ RETVAL=$?
+ if [ ${RETVAL} -eq 0 ] ; then
+  if [ -n "${ROLE_NAME}" ] ; then
+   local TMP_POLICIES=""
+   mk_tmp_file TMP_POLICIES
+   if [ ${#LIST_OF_POLICIES[@]} -gt 0 ] ; then
+     for ((I = 0; I < ${#LIST_OF_POLICIES[@]}; ++I)); do
+       echo "${LIST_OF_POLICIES[$I]}" >> ${TMP_POLICIES}
+     done
+     get_list_of_policy_resources ${TMP_POLICIES}
+     RETVAL=$?
+     local TMP_SWAP
+     local TMP_GREP=""
+     mk_tmp_file TMP_SWAP
+     [[ -n "${ROLE_NAME}" ]] && TMP_GREP="${RESOURCE}|${ROLE_NAME}|" || TMP_GREP="${RESOURCE}|"
+     grep -F -v -i "${TMP_GREP}" ${TMP_POLICIES} > ${TMP_SWAP} 
+     cat ${TMP_SWAP} > ${TMP_POLICIES}
+     rm_tmp_file ${TMP_SWAP}
+     get_list_of_policy_resources ${TMP_POLICIES}
+     RETVAL=$?
+     if [ ${RETVAL} -eq 0 ] ; then
+       for ((I = 0; I < ${#LIST_OF_POLICY_RESOURCES[@]}; ++I)); do
+         delete_policy "${LIST_OF_POLICY_RESOURCES[$I]}" --domain ${DOMAIN_NAME} > /dev/null 2>&1
+         RETVAL=$?
+         if [ ! ${RETVAL} -eq 0 ] ; then
+           break
+         fi
+       done
+       if [ ${#LIST_OF_POLICY_RESOURCES[@]} -gt 0 ] ; then
+         rebuild_policies ${TMP_POLICIES} --domain ${DOMAIN_NAME}
+         RETVAL=$?
+       fi
+     fi
+   fi
+   rm_tmp_file ${TMP_POLICIES}
+  else
+    local HTTP_CODE=""
+    local HTTP_BODY="/dev/null"
+    local HTTP_RESPONSE="/dev/null"
+    url_encode "${RESOURCE}"
+    local HTTP_PATH="${ODL_PREFIX}/config/aaa:http-authorization/policies/policies/${ENCODED_URL}"
+    local HTTP_METHOD="DELETE"
+    local HTTP_CONTENT_TYPE="*/*"
+    local HTTP_ACCEPT="*/*"
+    http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+    if [ ${CURL_RETVAL} -eq 0 ] ; then
+      if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+        echo "${RESOURCE}|deleted"
+        RETVAL=0
+      else
+        RETVAL=${CURL_HTTP_CODE}
+      fi
+    else
+      RETVAL=${CURL_RETVAL}
+    fi
+  fi
+ fi
+ return ${RETVAL}
+}
+
+get_policies() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/config/aaa:http-authorization/"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="*/*"
+ local HTTP_ACCEPT="*/*"
+ local ITEMS=0
+ local ROLE_NAME=""
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        ITEMS=$(jq -r ".\"http-authorization\".policies.policies | length" ${HTTP_RESPONSE})
+        if [ ${ITEMS} -gt 0 ] ; then
+          local ITEM=0
+          while [ ${ITEM} -lt ${ITEMS} ] ; do
+           local INDEX=$(jq -r ".\"http-authorization\".policies.policies[${ITEM}].index" ${HTTP_RESPONSE})
+           local RESOURCE=$(jq -r ".\"http-authorization\".policies.policies[${ITEM}].resource" ${HTTP_RESPONSE})
+           local PERMISSIONS=$(jq -r ".\"http-authorization\".policies.policies[${ITEM}].permissions | length" ${HTTP_RESPONSE})
+           if [ ${PERMISSIONS} -gt 0 ] ; then
+             LIST_OF_POLICY_RESOURCES+=("${RESOURCE}")
+             local PERMISSION=0
+             while [ ${PERMISSION} -lt ${PERMISSIONS} ] ; do
+               local PERM_ROLE=$(jq -r ".\"http-authorization\".policies.policies[${ITEM}].permissions[${PERMISSION}].role" ${HTTP_RESPONSE})
+               if [ -z "${ROLE_NAME}" ] || [ "${ROLE_NAME,,}" == "${PERM_ROLE,,}" ] ; then
+                 local ACTION_PUT="false"
+                 local ACTION_GET="false"
+                 local ACTION_PATCH="false"
+                 local ACTION_DELETE="false"
+                 local ACTION_POST="false"
+                 local ACTIONS=$(jq -r ".\"http-authorization\".policies.policies[${ITEM}].permissions[${PERMISSION}].actions | length" ${HTTP_RESPONSE})
+                 if [ ${ACTIONS} -gt 0 ] ; then
+                   local ACTION=0
+                   while [ ${ACTION} -lt ${ACTIONS} ] ; do
+                     local ACTION_METHODS=$(jq -r ".\"http-authorization\".policies.policies[${ITEM}].permissions[${PERMISSION}].actions[${ACTION}]" ${HTTP_RESPONSE})
+                     case "${ACTION_METHODS,,}" in
+                       get)    ACTION_GET="true"
+                               ;;
+                       put)    ACTION_PUT="true"
+                               ;;
+                       patch)  ACTION_PATCH="true"
+                               ;;
+                       delete) ACTION_DELETE="true"
+                               ;;
+                       post)   ACTION_POST="true"
+                               ;;
+                     esac
+                     ((ACTION=ACTION+1))
+                   done
+                 fi
+                 LIST_OF_POLICIES+=("${RESOURCE}|${INDEX}|${PERM_ROLE}|${ACTION_GET}|${ACTION_PUT}|${ACTION_PATCH}|${ACTION_DELETE}|${ACTION_POST}")
+               fi
+               ((PERMISSION=PERMISSION+1))
+             done
+           fi
+           ((ITEM=ITEM+1))
+          done
+        fi
+      fi
+      RETVAL=0
+   elif [ "${CURL_HTTP_CODE}" == "404" ] ; then
+    RETVAL=0
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+list_policies() {
+ local RETVAL=0
+ local ROLE_NAME=""
+ local DOMAIN_NAME="${ODL_AAA_DEFAULT_DOMAIN}"
+ if [ $# -gt 0 ] ; then
+
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --role)   shift
+                 ROLE_NAME="${1}"
+                 ;;
+       --domain) shift
+                 DOMAIN_NAME="${1}"
+                 ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+ get_policies
+ RETVAL=$?
+ if [ ${RETVAL} -eq 0 ] ; then
+   echo "[sequence]url-resource|index|role|GET|PUT|PATCH|DELETE|POST"
+   local LINENO=0
+   for ((I = 0; I < ${#LIST_OF_POLICIES[@]}; ++I)); do
+      ((LINENO=LINENO+1))
+      echo "[${LINENO}]${LIST_OF_POLICIES[$I]}"
+    done
+ fi
+ unset LIST_OF_POLICIES
+ unset LIST_OF_POLICY_RESOURCES
+ return ${RETVAL}
+}
+
+case_domains() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+    aaa_help_list
+    RETVAL=$?
+  else
+    case "${1,,}" in
+      add) shift
+           add_domain "${@}"
+           RETVAL=$?
+           ;;
+      list)
+           shift
+           list_domains "${@}"
+           RETVAL=$?
+           ;;
+      delete)
+           shift
+           delete_domain "${@}"
+           RETVAL=$?
+           ;;
+      enable)
+           shift
+           enable_domain "${@}"
+           ;;
+      disable)
+           shift
+           disable_domain "${@}"
+           ;;
+      *)
+           aaa_help_list
+           RETVAL=1
+           ;;
+   esac
+  fi
+  return ${RETVAL}
+}
+
+case_users() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+    aaa_help_list
+    RETVAL=$?
+  else
+    case "${1,,}" in
+      add) shift
+           add_user "${@}"
+           RETVAL=$?
+           ;;
+      list)
+           shift
+           list_users "${@}"
+           RETVAL=$?
+           ;;
+      delete)
+           shift
+           delete_user "${@}"
+           RETVAL=$?
+           ;;
+      enable)
+           shift
+           enable_user "${@}"
+           ;;
+      disable)
+           shift
+           disable_user "${@}"
+           ;;
+      password)
+           shift
+           password_user "${@}"
+           ;;
+      *)
+           aaa_help_list
+           RETVAL=1
+           ;;
+   esac
+  fi
+  return ${RETVAL}
+}
+
+case_roles() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+    aaa_help_list
+    RETVAL=$?
+  else
+    case "${1,,}" in
+      add) shift
+           add_role "${@}"
+           RETVAL=$?
+           ;;
+      list)
+           shift
+           list_roles "${@}"
+           RETVAL=$?
+           ;;
+      delete)
+           shift
+           delete_role "${@}"
+           RETVAL=$?
+           ;;
+      *)
+           aaa_help_list
+           RETVAL=1
+           ;;
+   esac
+  fi
+  return ${RETVAL}
+}
+
+case_policies() {
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+    aaa_help_list
+    RETVAL=$?
+  else
+    case "${1,,}" in
+      add) shift
+           add_policy ${@}
+           RETVAL=$?
+           ;;
+      list)
+           shift
+           list_policies ${@}
+           RETVAL=$?
+           ;;
+      delete)
+           shift
+           delete_policy ${@}
+           RETVAL=$?
+           ;;
+      *)
+           aaa_help_list
+           RETVAL=1
+           ;;
+   esac
+  fi
+  return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  aaa_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    aaa_help_list
+    RETVAL=0
+    ;;
+  domains)
+    shift
+    case_domains "${@}"
+    RETVAL=$?
+    ;;
+  roles)
+    shift
+    case_roles "${@}"
+    RETVAL=$?
+    ;;
+  users)
+    shift
+    case_users "${@}"
+    RETVAL=$?
+    ;;
+  policies)
+    shift
+    case_policies "${@}"
+    RETVAL=$?
+    ;;
+  keystore)
+    shift
+    get_keystore ${@}
+    ;;
+   *)
+    aaa_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}

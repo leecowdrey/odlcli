@@ -1,0 +1,1095 @@
+#!/bin/bash
+RETVAL=0
+
+pon_clean_sigint() {
+  local RETVAL=0
+  [[ -n "${ONU_UUID}" ]] && undefine_onu
+  [[ -n "${VOLT_MF_UUID}" ]] && undefine_volt_mf
+  rm -f "${CLI_TMP}/${cli_name}.$$.????????" &>/dev/null
+  exit ${RETVAL}
+}
+
+check_sdn() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_OPER_RESOURCE}/csdm:about"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat > ${HTTP_BODY} <<EOF
+{"input":{}}
+EOF
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local ABOUT=$(jq -r ".\"csdm:output\".about | length" ${HTTP_RESPONSE})
+        if [ ${ABOUT} -gt 0 ] ; then
+          RETVAL=0
+        else
+          RETVAL=1
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+define_volt_mf() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_OPER_RESOURCE}/csdm-xnf:define"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ VOLT_MF_IDENTIFIER=$(openssl rand -hex 8)
+ set_config VOLT_MF_IDENTIFIER "${VOLT_MF_IDENTIFIER}"
+ mk_tmp_file HTTP_BODY
+ cat > ${HTTP_BODY} <<EOF
+{
+    "input": {
+        "model-namespace": "${VOLT_MF_XMLNS}",
+        "model-revision": "${VOLT_MF_XMLNS_REVISION}",
+        "identifier": "${VOLT_MF_IDENTIFIER}",
+        "name": "${VOLT_MF_NAME}",
+        "description": "CommScope Shelf OLT XP6164S simulator",
+        "location-decimal-degrees": "0.0,0.0",
+        "host": "${VOLT_MF_HOST}",
+        "port": ${VOLT_MF_PORT},
+        "username": "${VOLT_MF_USERNAME}",
+        "password": "${VOLT_MF_PASSWORD}",
+        "data-model": "yang",
+        "protocol": "netconf",
+        "incarnation": "pnf",
+        "state": "operational",
+        "tcp-only": false,
+        "connection-timeout-millis": 32000,
+        "default-request-timeout-millis": 20000,
+        "between-attempts-timeout-millis": 2000,
+        "sleep-factor": 1.5,
+        "keepalive-delay": 60,
+        "concurrent-rpc-limit": 2,
+        "max-connection-attempts": 5,
+        "reconnect-on-changed-schema": false,
+        "netconf-username": "${VOLT_MF_USERNAME}",
+        "netconf-password": "${VOLT_MF_PASSWORD}",
+        "netconf-authentication-method": "password",
+        "capability-override": {
+            "override": true,
+            "capability": [
+                    "urn:bbf:yang:bbf-mgmd?module=bbf-mgmd-operational-interface-to-router&amp;revision=2020-10-13",
+                    "urn:ieee:std:802.1X:yang:ieee802-dot1x?module=ieee802-dot1x&amp;revision=2020-02-18",
+                    "urn:ietf:params:xml:ns:netmod:notification?module=nc-notifications&amp;revision=2008-07-14",
+                    "urn:ietf:params:xml:ns:yang:iana-if-type?module=iana-if-type&amp;revision=2017-01-19",
+                    "urn:bbf:yang:bbf-xpon-onu-types?module=bbf-xpon-onu-types&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-interface-usage?module=bbf-interface-usage&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-yang-library?module=ietf-yang-library&amp;revision=2019-01-04",
+                    "urn:bbf:yang:bbf-xpongemtcont?module=bbf-xpongemtcont-tcont-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-filters?module=bbf-qos-filters&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-qos-policing?module=bbf-qos-policing&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-inet-types?module=ietf-inet-types&amp;revision=2013-07-15",
+                    "urn:bbf:yang:bbf-l2-dhcpv4-relay-forwarding?module=bbf-l2-dhcpv4-relay-forwarding&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-voltmf-entity?module=bbf-voltmf-entity&amp;revision=2021-02-07",
+                    "urn:bbf:yang:bbf-xpon-if-type?module=bbf-xpon-if-type&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon-performance-management?module=bbf-xpon-performance-management&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-composite-filters?module=bbf-qos-composite-filters&amp;revision=2021-06-02",
+                    "urn:bbf:yang:obbaa:network-manager?module=bbf-obbaa-network-manager&amp;revision=2021-02-01",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-forwarders&amp;revision=2020-10-13",
+                    "urn:bbf:yang:obbaa:onu-management?module=bbf-obbaa-onu-management&amp;revision=2021-04-21",
+                    "urn:bbf:yang:bbf-xpon-defects?module=bbf-xpon-defects&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-netconf?module=ietf-netconf&amp;revision=2011-06-01",
+                    "urn:bbf:yang:bbf-yang-types?module=bbf-yang-types&amp;revision=2020-05-11",
+                    "urn:bbf:yang:bbf-xpongemtcont?module=bbf-xpongemtcont-gemport-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-forwarding-databases&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xponvani?module=bbf-xponvani-base&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-interfaces?module=ietf-interfaces&amp;revision=2018-02-20",
+                    "urn:bbf:yang:bbf-qos-policing-types?module=bbf-qos-policing-types&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-tcp-client?module=ietf-tcp-client&amp;revision=2020-08-20",
+                    "urn:ietf:params:xml:ns:yang:ietf-keystore?module=ietf-keystore&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-wavelength-profile-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-policies-state?module=bbf-qos-policies-state&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-mgmd-types?module=bbf-mgmd-types&amp;revision=2020-10-13",
+                    "urn:bbf:yang:obbaa:module-library-check?module=bbf-obbaa-module-library-check&amp;revision=2018-11-07",
+                    "urn:ietf:params:xml:ns:yang:ietf-netconf-acm?module=ietf-netconf-acm&amp;revision=2018-02-14",
+                    "urn:bbf:yang:bbf-qos-traffic-mngt-state?module=bbf-qos-traffic-mngt-state&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-vomci-proxy?module=bbf-vomci-proxy&amp;revision=2020-02-07",
+                    "urn:bbf:yang:bbf-xponani?module=bbf-xponani&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-crypto-types?module=ietf-crypto-types&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-mac-learning-control&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpongemtcont?module=bbf-xpongemtcont&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-hardware?module=bbf-hardware&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-hardware-state?module=ietf-hardware-state&amp;revision=2018-03-13",
+                    "urn:bbf:yang:bbf-hardware-transceivers?module=bbf-hardware-transceivers&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-xponvani?module=bbf-xponvani-v-ani-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-enhanced-scheduling?module=bbf-qos-enhanced-scheduling&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-truststore?module=ietf-truststore&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-vomci-function?module=bbf-vomci-function&amp;revision=2021-02-07",
+                    "urn:bbf:yang:bbf-qos-policing-state?module=bbf-qos-policing-state&amp;bbf-qos-policing-state&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-qos-rate-control?module=bbf-qos-rate-control&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-kafka-agent?module=bbf-kafka-agent&amp;revision=2021-02-19",
+                    "urn:ietf:params:xml:ns:yang:iana-if-type?module=iana-if-type&amp;revision=2017-03-30",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-network-function-endpoint-filter?module=bbf-network-function-endpoint-filter&amp;revision=2021-03-04",
+                    "urn:ietf:params:xml:ns:yang:ietf-netconf-notifications?module=ietf-netconf-notifications&amp;revision=2012-02-06",
+                    "urn:bbf:yang:bbf-vomci-entity?module=bbf-vomci-entity&amp;revision=2021-02-07",
+                    "urn:ietf:params:xml:ns:yang:ietf-hardware?module=ietf-hardware&amp;revision=2018-03-13",
+                    "urn:bbf:yang:bbf-xponvani?module=bbf-xponvani-v-enet-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon-types?module=bbf-xpon-types&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-interfaces-statistics-management?module=bbf-interfaces-statistics-management&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-channel-pair-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-mac-learning&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-policies-sub-interfaces?module=bbf-qos-policies-sub-interfaces&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-ethertypes?module=ietf-ethertypes&amp;revision=2019-03-04",
+                    "urn:ietf:params:xml:ns:yang:ietf-tls-client?module=ietf-tls-client&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-xponvani?module=bbf-xponvani&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-alarms?module=ietf-alarms&amp;revision=2019-09-11",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-multicast-distribution-set-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-hardware-cpu?module=bbf-hardware-cpu&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-sub-interface-tagging?module=bbf-sub-interface-tagging&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-link-table?module=bbf-link-table&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-interfaces-performance-management?module=bbf-interfaces-performance-management&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-packet-fields?module=ietf-packet-fields&amp;revision=2019-03-04",
+                    "urn:bbf:yang:bbf-hardware-transceivers-xpon?module=bbf-hardware-transceivers-xpon&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-hardware-transceiver-alarm-types?module=bbf-hardware-transceiver-alarm-types&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-l2-forwarding-shared-fdb?module=bbf-l2-forwarding-shared-fdb&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xponvani-power-management?module=bbf-xponvani-power-management&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-shaping?module=bbf-qos-shaping&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-system?module=ietf-system&amp;revision=2014-08-06",
+                    "urn:ietf:params:xml:ns:yang:ietf-tcp-server?module=ietf-tcp-server&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-split-horizon-profiles&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:iana-crypt-hash?module=iana-crypt-hash&amp;revision=2014-08-06",
+                    "urn:bbf:yang:bbf-mgmd?module=bbf-mgmd-configuration-multicast-snoop&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-inet-types?module=bbf-inet-types&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-mgmd?module=bbf-mgmd-configuration-interface-to-host&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-channel-partition-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-mgmd?module=bbf-mgmd-operational-interface-to-host&amp;revision=2020-10-13",
+                    "urn:bbf:yang:obbaa:device-adapters?module=bbf-obbaa-device-adapters&amp;revision=2018-08-31",
+                    "urn:bbf:yang:bbf-alarm-types?module=bbf-alarm-types&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-policies?module=bbf-qos-policies&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-availability?module=bbf-availability&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-vomci-types?module=bbf-vomci-types&amp;revision=2020-12-01",
+                    "urn:bbf:yang:bbf-xponani?module=bbf-xponani-ani-body&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-netconf-monitoring?module=ietf-netconf-monitoring&amp;revision=2010-10-04",
+                    "urn:bbf:yang:bbf-voltmf-message-monitor?module=bbf-voltmf-message-monitor&amp;revision=2021-02-07",
+                    "urn:ietf:params:xml:ns:yang:ietf-http-server?module=ietf-http-server&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-xpon-onu-state?module=bbf-xpon-onu-state&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-ipfix-psamp?module=ietf-ipfix-psamp&amp;revision=2012-09-05",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-base&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-subscriber-profiles?module=bbf-subscriber-profiles&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-omci-message-retransmission?module=bbf-omci-message-retransmission&amp;revision=2021-02-07",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-channel-termination-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon-if-type?module=bbf-xpon-if-type&amp;revision=2020-05-11",
+                    "urn:bbf:yang:bbf-frame-processing-profiles?module=bbf-frame-processing-profiles&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-qos-enhanced-scheduling-state?module=bbf-qos-enhanced-scheduling-state&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-qos-policer-envelope-profiles?module=bbf-qos-policer-envelope-profiles&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-pppoe-intermediate-agent?module=bbf-pppoe-intermediate-agent&amp;revision=2017-05-08",
+                    "urn:bbf:yang:bbf-xpon-power-management?module=bbf-xpon-power-management&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-network-function-client?module=bbf-network-function-client&amp;revision=2021-02-19",
+                    "urn:ietf:params:xml:ns:yang:ietf-tcp-common?module=ietf-tcp-common&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-xponani?module=bbf-xponani-v-enet-body&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-tls-common?module=ietf-tls-common&amp;revision=2020-08-20",
+                    "urn:ietf:params:xml:ns:yang:iana-hardware?module=iana-hardware&amp;revision=2018-03-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-http-client?module=ietf-http-client&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-flooding-policies&amp;revision=2020-10-13",
+                    "urn:bbf:yang:obbaa:pma-device-config?module=bbf-obbaa-pma-device-config&amp;revision=2018-06-15",
+                    "urn:bbf:yang:bbf-frame-classification?module=bbf-frame-classification&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-network-function-types?module=bbf-network-function-types&amp;revision=2021-03-01",
+                    "urn:ietf:params:xml:ns:yang:ietf-routing-types?module=ietf-routing-types&amp;revision=2017-12-04",
+                    "urn:ietf:params:xml:ns:yang:ietf-datastores?module=ietf-datastores&amp;revision=2018-02-14",
+                    "urn:bbf:yang:bbf-olt-vomci?module=bbf-olt-vomci&amp;revision=2021-02-07",
+                    "urn:bbf:yang:bbf-ptm?module=bbf-ptm&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-qos-policies-sub-interface-rewrite?module=bbf-qos-policies-sub-interface-rewrite&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-ldra?module=bbf-ldra&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon-onu-types?module=bbf-xpon-onu-types&amp;revision=2020-05-11",
+                    "urn:bbf:yang:bbf-sub-interfaces?module=bbf-sub-interfaces&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-l2-dhcpv4-relay?module=bbf-l2-dhcpv4-relay&amp;revision=2017-05-08",
+                    "urn:bbf:yang:bbf-l2-terminations?module=bbf-l2-terminations&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-classifiers?module=bbf-qos-classifiers&amp;revision=2021-06-02",
+                    "urn:bbf:yang:obbaa:netconf-stack?module=bbf-obbaa-netconf-stack&amp;revision=2019-01-29",
+                    "urn:ieee:std:802.1Q:yang:ieee802-types?module=ieee802-types&amp;revision=2018-03-07",
+                    "urn:ietf:params:xml:ns:yang:ietf-alarms-x733?module=ietf-alarms-x733&amp;revision=2019-09-11",
+                    "urn:ietf:params:xml:ns:yang:ietf-datastores?module=ietf-datastores&amp;revision=2017-08-17",
+                    "urn:bbf:yang:bbf-dot1q-types?module=bbf-dot1q-types&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-subscriber-types?module=bbf-subscriber-types&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:netconf:base:1.0?module=ietf-netconf&amp;revision=2011-06-01",
+                    "urn:bbf:yang:bbf-xponani-power-management?module=bbf-xponani-power-management&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-traffic-mngt?module=bbf-qos-traffic-mngt&amp;revision=2021-06-02",
+                    "urn:ietf:params:xml:ns:yang:ietf-tls-server?module=ietf-tls-server&amp;revision=2020-08-20",
+                    "urn:bbf:yang:bbf-hardware-storage-drives?module=bbf-hardware-storage-drives&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpongemtcont-gemport-performance-management?module=bbf-xpongemtcont-gemport-performance-management&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-multicast-gemport-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-grpc-client?module=bbf-grpc-client&amp;revision=2021-02-19",
+                    "urn:bbf:yang:bbf-mgmd?module=bbf-mgmd-configuration-interface-to-router&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-ethernet-performance-management?module=bbf-ethernet-performance-management&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-xpongemtcont?module=bbf-xpongemtcont-base&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpongemtcont?module=bbf-xpongemtcont-traffic-descriptor-profile-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xponani?module=bbf-xponani-base&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-hardware-types?module=bbf-hardware-types&amp;revision=2020-10-13",
+                    "urn:ieee:std:802.3:yang:ieee802-ethernet-interface?module=ieee802-ethernet-interface&amp;revision=2019-06-21",
+                    "urn:ieee:std:802.1X:yang:ieee802-dot1x-types?module=ieee802-dot1x-types&amp;revision=2020-02-18",
+                    "urn:bbf:yang:bbf-if-type?module=bbf-if-type&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-if-type?module=bbf-if-type&amp;revision=2020-05-11",
+                    "urn:ietf:params:xml:ns:netconf:notification:1.0?module=notifications&amp;revision=2008-07-14",
+                    "urn:bbf:yang:bbf-device-types?module=bbf-device-types&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-mgmd?module=bbf-mgmd&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-yang-types?module=ietf-yang-types&amp;revision=2013-07-15",
+                    "urn:ietf:params:xml:ns:yang:ietf-yang-library?module=ietf-yang-library&amp;revision=2016-06-21",
+                    "urn:bbf:yang:bbf-xpon-types?module=bbf-xpon-types&amp;revision=2020-05-11",
+                    "urn:bbf:yang:bbf-network-function-server?module=bbf-network-function-server&amp;revision=2021-02-19",
+                    "urn:bbf:yang:bbf-l2-forwarding?module=bbf-l2-forwarding-base&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-qos-types?module=bbf-qos-types&amp;revision=2021-06-02",
+                    "urn:bbf:yang:bbf-xpongemtcont-qos?module=bbf-xpongemtcont-qos&amp;revision=2020-10-13",
+                    "urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount?module=ietf-yang-schema-mount&amp;revision=2017-10-09",
+                    "urn:ietf:params:xml:ns:yang:ietf-pseudowires?module=ietf-pseudowires&amp;revision=2018-10-22",
+                    "urn:bbf:yang:bbf-mgmd-mrd?module=bbf-mgmd-mrd&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-xpon?module=bbf-xpon-channel-group-body&amp;revision=2020-10-13",
+                    "urn:bbf:yang:bbf-yang-types?module=bbf-yang-types&amp;revision=2021-06-02"
+            ]
+        }
+    }
+}
+EOF
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        VOLT_MF_UUID=$(jq -r ".\"csdm-xnf:output\".instance" ${HTTP_RESPONSE})
+        set_config VOLT_MF_UUID "${VOLT_MF_UUID}"
+        if [ -n "${VOLT_MF_UUID}" ] ; then
+          if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+            echo -e "${VOLT_MF_IDENTIFIER}|${TTY_GREEN}${VOLT_MF_UUID}${TTY_NORMAL}"
+          else
+            echo "${VOLT_MF_IDENTIFIER}|${VOLT_MF_UUID}"
+          fi
+          RETVAL=0
+        else
+          if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+            echo -e "${TTY_RED}${VOLT_MF_IDENTIFIER}${TTY_NORMAL}"
+          else
+            echo "${VOLF_MF_IDENTIFIER}"
+          fi
+          RETVAL=1
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+get_max_conn_attempts() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${VOLT_MF_UUID}/netconf-node-topology:max-connection-attempts?content=config"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        VOLT_MF_MAX_CONNECTION_ATTEMPTS=$(jq -r ".\"netconf-node-topology:max-connection-attempts\"" ${HTTP_RESPONSE})
+        VOLT_MF_MAX_CONNECTION_ATTEMPTS="${VOLT_MF_MAX_CONNECTION_ATTEMPTS:-0}"
+        if [ ${VOLT_MF_MAX_CONNECTION_ATTEMPTS} -ge 0 ] ; then
+          set_config VOLT_MF_MAX_CONNECTION_ATTEMPTS "${VOLT_MF_MAX_CONNECTION_ATTEMPTS}"
+          RETVAL=0
+        else
+          RETVAL=1
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+wait_mf_connected() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${VOLT_MF_UUID}/netconf-node-topology:connection-status?content=nonconfig"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local TRIES=1
+ mk_tmp_file HTTP_RESPONSE
+ while [ ${TRIES} -lt ${VOLT_MF_MAX_CONNECTION_ATTEMPTS} ] ; do
+   http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+   if [ ${CURL_RETVAL} -eq 0 ] ; then
+     if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+        if [ -f "${HTTP_RESPONSE}" ] ; then
+          local CONNECTION_STATUS=$(jq -r ".\"netconf-node-topology:connection-status\"" ${HTTP_RESPONSE})
+             if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+               echo -n "${VOLT_MF_IDENTIFIER}|${VOLT_MF_UUID}|"
+               case "${CONNECTION_STATUS,,}" in
+                 connected)           echo -e "${TTY_GREEN}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=0
+                                      break
+                                      ;;
+                 connecting)          echo -e "${TTY_AMBER}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=1
+                                      ;;
+                 unable-to-connect)   echo -e "${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=2
+                                      ;;
+                 failed-auth-failure) echo -e "${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=2
+                                      ;;
+                 failed-not-allowed)  echo -e "${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=2
+                                      ;;
+                 failed)              echo -e "${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=2
+                                      ;;
+                 *)                   echo -e "${TTY_RED}${CONNECTION_STATUS}${TTY_NORMAL}"
+                                      RETVAL=2
+                                      ;;
+               esac
+             else
+               echo "${VOLT_MF_IDENTIFIER}|${VOLT_MF_UUID}|${CONNECTION_STATUS}"
+               case "${CONNECTION_STATUS,,}" in
+                  connected)        RETVAL=0
+                                    break
+                                    ;;
+                  connecting)       RETVAL=1
+                                    ;;
+                 *)                 RETVAL=2
+                                    ;;
+               esac
+             fi
+        fi
+     else
+      RETVAL=${CURL_RETVAL}
+     fi
+   else
+     RETVAL=${CURL_RETVAL}
+   fi
+   [[ ${RETVAL} -eq 2 ]] && break
+   sleep ${ODL_TIMEOUT} &>/dev/null &
+   wait $!
+   ((TRIES++))
+ done
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+get_streams_list() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_OPER_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${VOLT_MF_UUID}/yang-ext:mount/ietf-netconf:get"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/xml"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat > ${HTTP_BODY} <<EOF
+<get xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+    <filter>
+        <manageEvent:netconf xmlns:manageEvent="urn:ietf:params:xml:ns:netmod:notification"/>
+    </filter>
+</get>
+EOF
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local STREAMS=$(jq -r ".\"ietf-netconf:output\".data.netconf.\"manageEvent:streams\".\"manageEvent:stream\" | length" ${HTTP_RESPONSE})
+        local STREAM=0
+        local MF_STREAMS=""
+        if [ ${STREAMS} -gt 0 ] ; then
+          while [ ${STREAM} -lt ${STREAMS} ] ; do
+              local STREAM_NAME=$(jq -r ".\"ietf-netconf:output\".data.netconf.\"manageEvent:streams\".\"manageEvent:stream\"[${STREAM}].\"manageEvent:name\"" ${HTTP_RESPONSE})
+            if [ -n "${STREAM_NAME}" ] ; then
+              echo "${VOLT_MF_IDENTIFIER}|${VOLT_MF_UUID}|${STREAM_NAME}"
+              MF_STREAMS="${MF_STREAMS}${STREAM_NAME}"
+              local STREAM_SP=0
+              ((STREAM_SP=STREAM+1))
+              [[ ${STREAM_SP} -lt ${STREAMS} ]] && MF_STREAMS="${MF_STREAMS},"
+            fi
+            ((STREAM=STREAM+1))
+          done
+        else
+          RETVAL=0
+        fi
+        if [ -n "${MF_STREAMS}" ] ; then
+          VOLT_MF_STREAMS="${MF_STREAMS}"
+          set_config VOLT_MF_STREAMS "${MF_STREAMS}"
+          RETVAL=0
+        else
+          RETVAL=1
+        fi
+      else
+        RETVAL=1
+      fi
+   else
+     RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+get_defined_mf_nf() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/network-topology:network-topology/topology=topology-netconf/node=${VOLT_MF_UUID}/yang-ext:mount/network-manager/network-functions-settings/nf-client/nf-initiate/remote-endpoints/remote-endpoint=${VOLT_MF_NAME}"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/xml"
+ local HTTP_ACCEPT="application/json"
+ local KAFKA_AGENT_REMOTE_PORT=0
+ local KAFKA_AGENT_REMOTE_ADDRESS=""
+ VOLT_MF_NF_DEFINED=1
+ set_config VOLT_MF_NF_DEFINED "${VOLT_MF_NF_DEFINED}"
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local REPS=$(jq -r ".\"bbf-obbaa-network-manager:remote-endpoint\" | length" ${HTTP_RESPONSE})
+        local REP=0
+        if [ ${REPS} -gt 0 ] ; then
+          while [ ${REP} -lt ${REPS} ] ; do
+              local APS=$(jq -r ".\"bbf-obbaa-network-manager:remote-endpoint\"[${REP}].\"access-point\" | length" ${HTTP_RESPONSE})
+              local AP=0
+              if [ ${APS} -gt 0 ] ; then
+                while [ ${AP} -lt ${APS} ] ; do
+                  local EXIST=$(jq -r ".\"bbf-obbaa-network-manager:remote-endpoint\"[${REP}].\"access-point\"[${AP}].\"kafka-agent\".\"kafka-agent-transport-parameters\".\"remote-port\" | length" ${HTTP_RESPONSE})
+                  if [ ${EXIST} -gt 0 ] ; then
+                    KAFKA_AGENT_REMOTE_PORT=$(jq -r ".\"bbf-obbaa-network-manager:remote-endpoint\"[${REP}].\"access-point\"[${AP}].\"kafka-agent\".\"kafka-agent-transport-parameters\".\"remote-port\"" ${HTTP_RESPONSE})
+                  fi
+                   EXIST=$(jq -r ".\"bbf-obbaa-network-manager:remote-endpoint\"[${REP}].\"access-point\"[${AP}].\"kafka-agent\".\"kafka-agent-transport-parameters\".\"remote-address\" | length" ${HTTP_RESPONSE})
+                  if [ ${EXIST} -gt 0 ] ; then
+                    KAFKA_AGENT_REMOTE_ADDRESS=$(jq -r ".\"bbf-obbaa-network-manager:remote-endpoint\"[${REP}].\"access-point\"[${AP}].\"kafka-agent\".\"kafka-agent-transport-parameters\".\"remote-address\"" ${HTTP_RESPONSE})
+                  fi
+                  ((AP=AP+1))
+                done
+              fi
+            ((REP=REP+1))
+          done
+          RETVAL=0
+          if [[ -n "${KAFKA_AGENT_REMOTE_ADDRESS}" && ${KAFKA_AGENT_REMOTE_PORT} -gt 0 ]] ; then
+            echo "${VOLT_MF_IDENTIFIER}|${VOLT_MF_UUID}|Kafka Agent ${KAFKA_AGENT_REMOTE_ADDRESS}:${KAFKA_AGENT_REMOTE_PORT}"
+          fi
+        else
+          RETVAL=0
+        fi
+      else
+        RETVAL=1
+      fi
+   else
+     RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+undefine_volt_mf() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat > ${HTTP_BODY} <<EOF
+{"input":{}}}
+EOF
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+     set_config VOLT_MF_IDENTIFIER ""
+     set_config VOLT_MF_UUID ""
+     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+   else
+     RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+add_mf_nf() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+add_polt_mgmt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+add_polt_root() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+check_polt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+define_onu() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_OPER_RESOURCE}/csdm-xnf:define"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local ONU_PREFIX=$(openssl rand -hex 2|tr '[a-z0-9]' '[A-Z0-9]')
+ local ONU_SUFFIX=$(openssl rand -hex 4|tr '[a-z0-9]' '[A-Z0-9]')
+ ONU_IDENTIFIER="${ONU_PREFIX}${ONU_SUFFIX%?}1"
+ VANI_IDENTIFIER="${ONU_PREFIX}${ONU_SUFFIX%?}2"
+ set_config ONU_IDENTIFIER "${ONU_IDENTIFIER}"
+ set_config VANI_IDENTIFIER "${VANI_IDENTIFIER}"
+ mk_tmp_file HTTP_BODY
+ cat > ${HTTP_BODY} <<EOF
+{
+   "input": {
+      "model-namespace": "${ONU_XMLNS}",
+      "model-revision": "${ONU_XMLNS_REVISION}",
+      "identifier": "${ONU_IDENTIFIER}",
+      "parent-instance": "${VOLT_MF_UUID}",
+      "name": "${ONU_NAME}",
+      "username": "root",
+      "password": "root",
+      "description": "Alpha PON-34000BC",
+      "data-model": "yang",
+      "protocol": "parent",
+      "incarnation": "pnf",
+      "state": "intent"
+   }
+}
+EOF
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        VOLT_MF_UUID=$(jq -r ".\"csdm-xnf:output\".instance" ${HTTP_RESPONSE})
+        set_config ONU_UUID "${ONU_UUID}"
+        if [ -n "${ONU_UUID}" ] ; then
+          set_config ONU_UUID "${ONU_UUID}"
+          if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+            echo -e "${ONU_IDENTIFIER}|${TTY_GREEN}${ONU_UUID}${TTY_NORMAL}"
+          else
+            echo "${ONU_IDENTIFIER}|${ONU_UUID}"
+          fi
+          RETVAL=0
+        else
+          if [ ${CLI_INTERACTIVE} -eq 0 ] ; then
+            echo -e "${TTY_RED}${ONU_IDENTIFIER}${TTY_NORMAL}"
+          else
+            echo "${ONU_IDENTIFIER}"
+          fi
+          RETVAL=1
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+add_onu_mgmt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+add_onu_root() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+add_onu_interfaces_polt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+check_onu_interfaces_polt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+wait_to_cycle() {
+ local RETVAL=0
+ sleep ${ODL_MAXTIME} &>/dev/null &
+ wait $!
+ return ${RETVAL}
+}
+
+delete_onu_root() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+delete_onu_mgmt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+undefine_onu() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${ONU_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat > ${HTTP_BODY} <<EOF
+{"input":{}}}
+EOF
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+     set_config ONU_IDENTIFIER ""
+     set_config ONU_UUID ""
+     set_config VANI_IDENTIFIER ""
+     RETVAL=0
+   else
+     RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+
+delete_polt_root() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+delete_polt_mgmt() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/csdm/xnf/nf=${VOLT_MF_UUID}/undefine"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+# mk_tmp_file HTTP_BODY
+# cat > ${HTTP_BODY} <<EOF
+#{"input":{}}}
+#EOF
+# mk_tmp_file HTTP_RESPONSE
+# http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+# if [ ${CURL_RETVAL} -eq 0 ] ; then
+#   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+#     set_config VOLT_MF_IDENTIFIER ""
+#     set_config VOLT_MF_UUID ""
+#     set_config VOLT_MF_STREAMS ""
+     RETVAL=0
+#   else
+#     RETVAL=${CURL_RETVAL}
+#   fi
+# else
+#   RETVAL=${CURL_RETVAL}
+# fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+# rm_tmp_file "${HTTP_BODY}"
+ return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  pon_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    pon_help_list
+    RETVAL=0
+    ;;
+  clean)
+    shift
+    pon_clean_sigint
+    ;;
+  test)
+    shift
+    trap pon_clean_sigint INT
+    check_sdn "${@}"
+    RETVAL=$?
+    [[ ${RETVAL} -eq 0 ]] && define_volt_mf "${@}"
+    [[ ${RETVAL} -eq 0 ]] && get_max_conn_attempts "${@}"
+    [[ ${RETVAL} -eq 0 ]] && wait_mf_connected "${@}"
+    [[ ${RETVAL} -eq 0 ]] && get_streams_list "${@}"
+    [[ ${RETVAL} -eq 0 ]] && get_defined_mf_nf "${@}"
+    [[ ${RETVAL} -eq 0 && ${VOLT_MF_NF_DEFINED} -eq 0 ]] && add_mf_nf "${@}"
+    [[ ${RETVAL} -eq 0 ]] && add_polt_mgmt "${@}"
+    [[ ${RETVAL} -eq 0 ]] && add_polt_root "${@}"
+    [[ ${RETVAL} -eq 0 ]] && check_polt "${@}"
+    [[ ${RETVAL} -eq 0 ]] && define_onu "${@}"
+    [[ ${RETVAL} -eq 0 ]] && add_onu_mgmt "${@}"
+    [[ ${RETVAL} -eq 0 ]] && add_onu_root "${@}"
+    [[ ${RETVAL} -eq 0 ]] && add_onu_interfaces_polt "${@}"
+    [[ ${RETVAL} -eq 0 ]] && check_onu_interfaces_polt "${@}"
+    [[ ${RETVAL} -eq 0 ]] && wait_to_cycle "${@}"
+    [[ ${RETVAL} -eq 0 ]] && delete_onu_root "${@}"
+    [[ ${RETVAL} -eq 0 ]] && delete_onu_mgmt "${@}"
+    [[ -n "${ONU_UUID}" ]] && undefine_onu "${@}"
+    [[ ${RETVAL} -eq 0 ]] && delete_polt_root "${@}"
+    [[ ${RETVAL} -eq 0 ]] && delete_polt_mgmt "${@}"
+    [[ -n "${VOLT_MF_UUID}" ]] && undefine_volt_mf "${@}"
+    trap clean_sigint INT
+    RETVAL=$?
+    ;;
+  *)
+    pon_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}

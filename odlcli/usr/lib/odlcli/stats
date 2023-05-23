@@ -1,0 +1,406 @@
+#!/bin/bash
+RETVAL=0
+
+list_rt_sysprop() {
+ local SYSPROP_RT_VALUE=$(jq -r ".value.SystemProperties.\"${1}\"" ${2})
+ echo -e "SystemProperties.${1}|${SYSPROP_RT_VALUE}"
+}
+
+list_version() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/jolokia/read/org.apache.karaf:type=bundle,name=root"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_RESPONSE
+ jolokia_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local ROOT_BUNDLES=""
+        mk_tmp_file ROOT_BUNDLES
+        cat ${HTTP_RESPONSE} | jq -r '.value.Bundles | .[] | { Version,State,"Symbolic Name",ID,"Start Level",Name,"Update Location" } ' | jq --slurp '.' > ${ROOT_BUNDLES}
+        local BUNDLES=$(jq -r "length" ${ROOT_BUNDLES})
+        if [ ${BUNDLES} -gt 0 ] ; then
+          echo "[]Name|Version|Symbolic-Name|State|Start-Level"
+          local BUNDLE=0
+            while [ ${BUNDLE} -lt ${BUNDLES} ] ; do
+              local NAME=$(jq -r ".[${BUNDLE}].Name" ${ROOT_BUNDLES})
+              local VERSION=$(jq -r ".[${BUNDLE}].Version" ${ROOT_BUNDLES})
+              local SYMBOLIC_NAME=$(jq -r ".[${BUNDLE}].\"Symbolic Name\"" ${ROOT_BUNDLES})
+              local STATE=$(jq -r ".[${BUNDLE}].State" ${ROOT_BUNDLES})
+              local ID=$(jq -r ".[${BUNDLE}].ID" ${ROOT_BUNDLES})
+              local START_LEVEL=$(jq -r ".[${BUNDLE}].\"Start Level\"" ${ROOT_BUNDLES})
+              #local UPDATE_LOCATION=$(jq -r ".[${BUNDLE}].\"Update Location\"" ${ROOT_BUNDLES})
+              echo "[${ID}]${NAME}|${VERSION}|${SYMBOLIC_NAME}|${STATE}|${START_LEVEL}"
+              ((BUNDLE=BUNDLE+1))
+            done
+        fi
+        rm_tmp_file "${ROOT_BUNDLES}"
+#        local VERSION=$(jq -r ".value.Bundles | to_entries[] | select(.value.\"Symbolic Name\" == \"org.opendaylight.yangtools.concepts\") | .value.Version" ${HTTP_RESPONSE})
+#        echo "Version|${VERSION}"
+      fi
+   elif [ "${curl_http_code}" == "401" ] ; then
+    install_jolokia
+    RETVAL=1
+   else
+    RETVAL=${curl_RETVAL}
+   fi
+ else
+   RETVAL=${curl_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+list_value() {
+ local RT_VALUE=$(jq -r ".value.${1}" ${2})
+ echo -e "OperatingSystem.${1}|${RT_VALUE}"
+}
+
+list_os() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/jolokia/"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat >${HTTP_BODY} <<OS-EOF
+{"type":"read","mbean":"java.lang:type=OperatingSystem"}
+OS-EOF
+ mk_tmp_file HTTP_RESPONSE
+ jolokia_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local values=$(jq -r ".value | length" ${HTTP_RESPONSE})
+        if [ ${values} -gt 0 ] ; then
+          echo "[]Bean|Value"
+          list_value "Arch" ${HTTP_RESPONSE}
+          list_value "AvailableProcessors" ${HTTP_RESPONSE}
+          list_value "CommittedVirtualMemorySize" ${HTTP_RESPONSE}
+          list_value "FreePhysicalMemorySize" ${HTTP_RESPONSE}
+          list_value "FreeSwapSpaceSize" ${HTTP_RESPONSE}
+          list_value "MaxFileDescriptorCount" ${HTTP_RESPONSE}
+          list_value "Name" ${HTTP_RESPONSE}
+          list_value "OpenFileDescriptorCount" ${HTTP_RESPONSE}
+          list_value "ProcessCpuLoad" ${HTTP_RESPONSE}
+          list_value "ProcessCpuTime" ${HTTP_RESPONSE}
+          list_value "SystemCpuLoad" ${HTTP_RESPONSE}
+          list_value "SystemLoadAverage" ${HTTP_RESPONSE}
+          list_value "TotalPhysicalMemorySize" ${HTTP_RESPONSE}
+          list_value "TotalSwapSpaceSize" ${HTTP_RESPONSE}
+          list_value "Version" ${HTTP_RESPONSE}
+        fi
+      fi
+   elif [ "${curl_http_code}" == "401" ] ; then
+    install_jolokia
+    RETVAL=1
+   else
+    RETVAL=${curl_RETVAL}
+   fi
+ else
+   RETVAL=${curl_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+list_memory() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/jolokia/"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat >${HTTP_BODY} <<MEM-EOF
+{"type":"read","mbean":"java.lang:type=Memory"}
+MEM-EOF
+ mk_tmp_file HTTP_RESPONSE
+ jolokia_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local VALUES=$(jq -r ".value | length" ${HTTP_RESPONSE})
+        if [ ${VALUES} -gt 0 ] ; then
+          echo "[]Allocation|Heap|Non-Heap"
+          local HEAP_INIT=$(jq -r ".value.HeapMemoryUsage.init" ${HTTP_RESPONSE})
+          local HEAP_COMMIT=$(jq -r ".value.HeapMemoryUsage.committed" ${HTTP_RESPONSE})
+          local HEAP_MAX=$(jq -r ".value.HeapMemoryUsage.max" ${HTTP_RESPONSE})
+          local HEAP_USED=$(jq -r ".value.HeapMemoryUsage.used" ${HTTP_RESPONSE})
+          local NON_HEAP_INIT=$(jq -r ".value.NonHeapMemoryUsage.init" ${HTTP_RESPONSE})
+          local NON_HEAP_COMMIT=$(jq -r ".value.NonHeapMemoryUsage.committed" ${HTTP_RESPONSE})
+          local NON_HEAP_MAX=$(jq -r ".value.NonHeapMemoryUsage.max" ${HTTP_RESPONSE})
+          local NON_HEAP_USED=$(jq -r ".value.NonHeapMemoryUsage.used" ${HTTP_RESPONSE})
+          echo "Memory.init|${HEAP_INIT}|${NON_HEAP_INIT}"
+          echo "Memory.committed|${HEAP_COMMIT}|${NON_HEAP_COMMIT}"
+          echo "Memory.max|${HEAP_MAX}|${NON_HEAP_MAX}"
+          echo "Memory.used|${HEAP_USED}|${NON_HEAP_USED}"
+        fi
+      fi
+   elif [ "${CURL_HTTP_CODE}" == "401" ] ; then
+    install_jolokia
+    RETVAL=1
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+list_nodecounter() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/lumina-node-counter:node-counts"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/json"
+ local HTTP_ACCEPT="application/json"
+ local COUNTS=0
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        COUNTS=$(jq -r ".\"lumina-node-counter:node-counts\" | length" ${HTTP_RESPONSE})
+        if [ ${COUNTS} -gt 0 ] ; then
+          echo "[]lumina-node-counter|statistic"
+          local UNIQUE_ADDRESS=$(jq -r ".\"lumina-node-counter:node-counts\".\"unique-address-count\"" ${HTTP_RESPONSE})
+          local TOTAL_COUNT=$(jq -r ".\"lumina-node-counter:node-counts\".\"total-count\"" ${HTTP_RESPONSE})
+          local LAST_CHANGE=$(jq -r ".\"lumina-node-counter:node-counts\".\"last-change\"" ${HTTP_RESPONSE})
+          local COUNT_PROTOCOLS=$(jq -r ".\"lumina-node-counter:node-counts\".\"count-per-protocol\" | length" ${HTTP_RESPONSE})
+          echo "unique-address-count|${UNIQUE_ADDRESS}"
+          echo "total-count|${TOTAL_COUNT}"
+          echo "last-change|${LAST_CHANGE}"
+          echo "protocols:${COUNT_PROTOCOLS}"
+          if [ ${COUNT_PROTOCOLS} -gt 0 ] ; then
+            echo "[]protocol|count"
+            local COUNT_PROTOCOL=0
+            while [ ${COUNT_PROTOCOL} -lt ${COUNT_PROTOCOLS} ] ; do
+              local PROTOCOL=$(jq -r ".\"lumina-node-counter:node-counts\".\"count-per-protocol\"[${COUNT_PROTOCOL}].protocol" ${HTTP_RESPONSE})
+              local UNIQUE=$(jq -r ".\"lumina-node-counter:node-counts\".\"count-per-protocol\"[${COUNT_PROTOCOL}].\"unique-node-count\"" ${HTTP_RESPONSE})
+              echo "${COUNT_PROTOCOL}|${PROTOCOL}|${UNIQUE}"
+              ((COUNT_PROTOCOL=COUNT_PROTOCOL+1))
+            done
+          fi
+        fi
+      fi
+   elif [ "${CURL_HTTP_CODE}" == "401" ] ; then
+    echo "${ODL_HOST} is not a Lumina SDN controller and/or Lumina Node Counter is not deployed"
+    RETVAL=1
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+list_runtime() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="/jolokia/"
+ local HTTP_BODY=""
+ local HTTP_METHOD="POST"
+ local HTTP_CONTENT_TYPE="application/json"
+ local HTTP_ACCEPT="application/json"
+ mk_tmp_file HTTP_BODY
+ cat >${HTTP_BODY} <<RT-EOF
+{"type":"read","mbean":"java.lang:type=Runtime"}
+RT-EOF
+ mk_tmp_file HTTP_RESPONSE
+ jolokia_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        local VALUES=$(jq -r ".value | length" ${HTTP_RESPONSE})
+        if [ ${VALUES} -gt 0 ] ; then
+          echo "[]Bean|Value"
+          list_value "LibraryPath" ${HTTP_RESPONSE}
+          list_value "BootClassPath" ${HTTP_RESPONSE}
+          list_value "ClassPath" ${HTTP_RESPONSE}
+          list_value "ManagementSpecVersion" ${HTTP_RESPONSE}
+          list_value "Name" ${HTTP_RESPONSE}
+          list_value "SpecName" ${HTTP_RESPONSE}
+          list_value "SpecVendor" ${HTTP_RESPONSE}
+          list_value "SpecVersion" ${HTTP_RESPONSE}
+          list_value "Uptime" ${HTTP_RESPONSE}
+          list_value "VmName" ${HTTP_RESPONSE}
+          list_value "VmVendor" ${HTTP_RESPONSE}
+          local SYSPROPS=$(jq -r ".value.SystemProperties | length" ${HTTP_RESPONSE})
+          if [ ${SYSPROPS} -gt 0 ] ; then
+            list_rt_sysprop "awt.toolkit" ${HTTP_RESPONSE}
+            list_rt_sysprop "com.sun.management.jmxremote" ${HTTP_RESPONSE}
+            list_rt_sysprop "file.encoding" ${HTTP_RESPONSE}
+            list_rt_sysprop "file.encoding.pkg" ${HTTP_RESPONSE}
+            list_rt_sysprop "file.separator" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.awt.graphicsenv" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.awt.printerjob" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.class.path" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.class.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.endorsed.dirs" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.ext.dirs" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.home" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.io.tmpdir" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.library.path" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.rmi.server.randomIDs" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.runtime.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.runtime.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.security.egd" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.security.properties" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.specification.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.specification.vendor" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.specification.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.util.logging.config.file" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vendor" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vendor.url" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vendor.url.bug" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.info" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.specification.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.specification.vendor" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.specification.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.vendor" ${HTTP_RESPONSE}
+            list_rt_sysprop "java.vm.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "jetty.git.hash" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.base" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.base.uri" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.clean.all" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.clean.cache" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.data" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.data.uri" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.default.repository" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.delay.console" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.etc" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.etc.uri" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.home" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.home.uri" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.instances" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.instances.uri" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.local.roles" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.local.user" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.log" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.restart" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.restart.jvm" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.restart.jvm.supported" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.secured.services" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.shell.init.script" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.startLocalConsole" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.startRemoteShell" ${HTTP_RESPONSE}
+            list_rt_sysprop "karaf.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "line.separator" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.aries.proxy.weaving.disabled" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.aries.proxy.weaving.enabled" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.jasper.compiler.disablejsr199" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.karaf.specs.debug" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.karaf.specs.timeout" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.servicemix.specs.debug" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.apache.servicemix.specs.timeout" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.ops4j.pax.logging.DefaultServiceLog.level" ${HTTP_RESPONSE}
+            list_rt_sysprop "org.osgi.framework.startlevel.beginning" ${HTTP_RESPONSE}
+            list_rt_sysprop "os.arch" ${HTTP_RESPONSE}
+            list_rt_sysprop "os.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "os.version" ${HTTP_RESPONSE}
+            list_rt_sysprop "path.separator" ${HTTP_RESPONSE}
+            list_rt_sysprop "securerandom.source" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.arch.data.model" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.boot.class.path" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.boot.library.path" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.cpu.endian" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.cpu.isalist" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.io.unicode.encoding" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.java.command" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.java.launcher" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.jnu.encoding" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.management.compiler" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.nio.ch.bugLevel" ${HTTP_RESPONSE}
+            list_rt_sysprop "sun.os.patch.level" ${HTTP_RESPONSE}
+            list_rt_sysprop "user.country" ${HTTP_RESPONSE}
+            list_rt_sysprop "user.dir" ${HTTP_RESPONSE}
+            list_rt_sysprop "user.home" ${HTTP_RESPONSE}
+            list_rt_sysprop "user.language" ${HTTP_RESPONSE}
+            list_rt_sysprop "user.name" ${HTTP_RESPONSE}
+            list_rt_sysprop "user.timezone" ${HTTP_RESPONSE}
+            list_rt_sysprop "xml.catalog.files" ${HTTP_RESPONSE}
+          fi
+          local INPUT_ARGS=$(jq -r ".value.InputArguments| length" ${HTTP_RESPONSE})
+          if [ ${INPUT_ARGS} -gt 0 ] ; then
+            local INPUT_ARG=0
+            while [ ${INPUT_ARG} -lt ${INPUT_ARGS} ] ; do
+              local VALUE_ARG=$(jq -r ".value.InputArguments[${INPUT_ARG}]" ${HTTP_RESPONSE})
+              echo "InputArguments|${INPUT_ARG}|${VALUE_ARG}"
+              ((INPUT_ARG=INPUT_ARG+1))
+            done
+          fi
+        fi
+      fi
+   elif [ "${CURL_HTTP_CODE}" == "401" ] ; then
+    install_jolokia
+    RETVAL=1
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  stats_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    stats_help_list
+    RETVAL=0
+    ;;
+  runtime)
+    shift
+    list_runtime "${@}"
+    RETVAL=$?
+    ;;
+  os)
+    shift
+    list_os "${@}"
+    RETVAL=$?
+    ;;
+  memory)
+    shift
+    list_memory "${@}"
+    RETVAL=$?
+    ;;
+  nodecount)
+    shift
+    list_nodecounter "${@}"
+    ;;
+  version)
+    shift
+    list_version "${@}"
+    ;;
+  *)
+    stats_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}

@@ -1,0 +1,7 @@
+#!/bin/bash
+RETVAL=0
+
+ show_banner
+ show_copyright
+
+return ${RETVAL}

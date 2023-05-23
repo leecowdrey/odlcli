@@ -1,0 +1,118 @@
+#!/bin/bash
+RETVAL=0
+
+site_list() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/config/jsonrpc:config/configured-endpoints/inmarsat-l3vpn-svc-wfe/yang-ext:mount/inmarsat-l3vpn-svc:svn/sites/site/${1}"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local SITES=0
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        SITES=$(jq -r ".site | length" ${HTTP_RESPONSE})
+        if [ ${SITES} -gt 0 ] ; then
+          local SITE=0
+          echo "[]vpn-name|nodes"
+          while [ ${SITE} -lt ${SITES} ] ; do
+           local VPNNAME=$(jq -r ".site[${SITE}].\"vpn-name\"" ${HTTP_RESPONSE})
+           local TYPE=$(jq -r ".site[${SITE}].type" ${HTTP_RESPONSE})
+           local NODES=$(jq -r ".site[${SITE}].nodes | length" ${HTTP_RESPONSE})
+           local NODE=0
+           local NODELIST=""
+           while [ ${NODE} -lt ${NODES} ] ; do
+             NODELIST+=$(jq -r ".site[${SITE}].nodes[${NODE}]" ${HTTP_RESPONSE})
+             ((NODE=NODE+1))
+             [[ ${NODE} -lt ${NODES} ]] && NODELIST+=","
+           done
+           echo "[${SITE}]${VPNNAME}|${NODELIST}"
+           ((SITE=SITE+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+sites_list() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/config/jsonrpc:config/configured-endpoints/inmarsat-l3vpn-svc-wfe/yang-ext:mount/inmarsat-l3vpn-svc:svn/sites"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local SITES=0
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        SITES=$(jq -r ".sites.site | length" ${HTTP_RESPONSE})
+        if [ ${SITES} -gt 0 ] ; then
+          echo "[]vpn-name|nodes"
+          local SITE=0
+          while [ ${SITE} -lt ${SITES} ] ; do
+            local VPNNAME=$(jq -r ".sites.site[${SITE}].\"vpn-name\"" ${HTTP_RESPONSE})
+            local NODES=$(jq -r ".sites.site[${SITE}].nodes | length" ${HTTP_RESPONSE})
+            local NODE=0
+            local NODELIST=""
+            while [ ${NODE} -lt ${NODES} ] ; do
+              NODELIST+=$(jq -r ".sites.site[${SITE}].nodes[${NODE}]" ${HTTP_RESPONSE})
+              ((NODE=NODE+1))
+              [[ ${NODE} -lt ${NODES} ]] && NODELIST+=","
+            done
+            echo "[${SITE}]${VPNNAME}|${NODELIST}"
+            ((SITE=SITE+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  sites_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    sites_help_list
+    RETVAL=0
+    ;;
+  list)
+    shift
+    if [ $# -gt 0 ] ; then
+      site_list "${@}"
+      RETVAL=$?
+    else
+      sites_list
+      RETVAL=$?
+    fi
+    ;;
+  *)
+    sites_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}

@@ -1,0 +1,255 @@
+#!/bin/bash
+RETVAL=0
+STREAMS_PREFIX="${ODL_PROTOCOL,,}://${ODL_HOST}:${ODL_PORT}${ODL_PREFIX}/notif/notification-stream/"
+
+streams_bootstrap() {
+  local RETVAL=0
+  local HTTP_CODE=""
+  local HTTP_RESPONSE="/dev/null"
+  local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/ietf-restconf-monitoring:restconf-state/streams"
+  local HTTP_BODY="/dev/null"
+  local HTTP_METHOD="GET"
+  local HTTP_CONTENT_TYPE="*/*"
+  local HTTP_ACCEPT="application/json"
+  while [ true ] ; do
+    http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+    if [ ${CURL_RETVAL} -eq 0 ] ; then
+      if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+        RETVAL=0
+        NOW=$(date +"%d %b %Y %T %Z")
+        echo "${NOW} - RFC8040 Events/Notifications streams is now available"
+        break
+      fi
+    fi
+    NOW=$(date +"%d %b %Y %T %Z")
+    echo "${NOW} - Waiting for RFC8040 Events/Notifications streams to become available"
+    sleep ${ODL_MAXTIME} &>/dev/null &
+    wait $!
+  done
+  return ${RETVAL}
+}
+
+stream_monitor() {
+  local STREAMS_CURL_PID=0
+  local STREAMS_SLEEP_PID=0
+  sigint() {
+    local RETVAL=0
+    if [ ! ${STREAMS_SLEEP_PID} -eq 0 ] ; then
+      kill -9 ${STREAMS_SLEEP_PID} &> /dev/null
+      STREAMS_SLEEP_PID=0
+    fi
+    if [ ! ${STREAMS_CURL_PID} -eq 0 ] ; then
+      kill -9 ${STREAMS_CURL_PID} &>/dev/null
+      RETVAL=$?
+      STREAMS_CURL_PID=0
+    fi
+    return ${RETVAL}
+  }
+
+  local RETVAL=0
+  if [ $# -eq 0 ] ; then
+   streams_help_list
+   RETVAL=1
+   return ${RETVAL}
+  fi
+  # ietf-netconf-notifications:netconf-config-change
+  local STREAM_NAME="${1}"
+  shift
+  local HTTP_CODE=""
+  local HTTP_RESPONSE=""
+  local HTTP_BODY="/dev/null"
+  local HTTP_METHOD="GET"
+  local HTTP_CONTENT_TYPE="application/yang-data+xml"
+  local HTTP_ACCEPT="text/event-stream"
+  local HTTP_PATH="${STREAMS_PREFIX}${STREAM_NAME}"
+  local SSE=0
+  local WEBSOCKETS=1
+  local METHOD=${SSE}
+  if [ $# -gt 0 ] ; then
+    local OPTION="${1}"
+    while [ $# -gt 0 ] ; do
+      case "${OPTION,,}" in
+        --sse)  shift
+                METHOD=${SSE}
+                ;;
+        --ws)
+                shift
+                METHOD=${WEBSOCKETS}
+                ;;
+        --json) shift
+                HTTP_PATH+="/JSON"
+                HTTP_CONTENT_TYPE="application/yang-data+json"
+                ;;
+      esac
+      shift
+      OPTION=$1
+    done
+  fi
+  if [ -z "${HTTP_PATH}" ] ; then
+    streams_help_list
+    RETVAL=1
+    return ${RETVAL}
+  fi
+  get_password
+  local PASSWORD="${CONFIG_VALUE}"
+  echo "[]Press CTRL-C to stop"
+  trap sigint INT
+  if [ ${METHOD} -eq ${METHOD_WEBSOCKETS} ] ; then
+   /usr/bin/curl -s \
+                 --insecure \
+                 --connect-timeout ${ODL_TIMEOUT} \
+                 --no-buffer \
+                 --keepalive-time ${OLD_MAXTIME} \
+                 --user-agent "${USER_AGENT}" \
+                 -u "${ODL_USER}:${PASSWORD}" \
+                 -H "Cache-control: no-cache" \
+                 -H "Accept: ${HTTP_ACCEPT}" \
+                 -H "Connection: Upgrade" \
+                 -H "Upgrade: websocket" \
+                 -H "Host: ${ODL_HOST}" \
+                 -H "Origin: ${ODL_PROTOCOL}://${ODL_HOST}:${OLD_PORT}" \
+                 "${HTTP_PATH}" &
+  elif [ ${METHOD} -eq ${METHOD_SSE} ] ; then
+   /usr/bin/curl -s \
+                 --insecure \
+                 --connect-timeout ${ODL_TIMEOUT} \
+                 --no-buffer \
+                 --keepalive-time ${ODL_MAXTIME} \
+                 --user-agent "${USER_AGENT}" \
+                 -u "${ODL_USER}:${PASSWORD}" \
+                 -H "Cache-control: no-cache" \
+                 -H "Accept: ${HTTP_ACCEPT}" \
+                 -H "Connection: keep-alive" \
+                 "${HTTP_PATH}" &
+  else
+   RETVAL=1
+   trap - INT
+   return ${RETVAL}
+  fi
+  STREAMS_CURL_PID=$!
+  while [ true ] ; do
+    if [ ${STREAMS_CURL_PID} -eq 0 ] ; then
+      break
+    fi
+    kill -0 ${STREAMS_CURL_PID} &> /dev/null
+    if [ $? -eq 0 ] ; then
+      sleep ${ODL_MAXTIME} &>/dev/null &
+      STREAMS_SLEEP_PID=$!
+      wait ${STREAMS_SLEEP_PID}
+    else
+      break
+    fi
+  done
+  RETVAL=0
+  trap - INT
+  return ${RETVAL}
+}
+
+streams_list() {
+ local RETVAL=0
+ local HTTP_CODE=""
+ local HTTP_RESPONSE=""
+ local HTTP_PATH="${ODL_PREFIX}/${ODL_CONFIG_RESOURCE}/ietf-restconf-monitoring:restconf-state/streams"
+ local HTTP_BODY="/dev/null"
+ local HTTP_METHOD="GET"
+ local HTTP_CONTENT_TYPE="application/yang-data+json"
+ local HTTP_ACCEPT="application/json"
+ local ENCODING_JSON=0
+ local ENCODING_XML=0
+ local STREAM_JSON_SUFFIX="/JSON"
+ if [ $# -gt 0 ] ; then
+   local OPTION="${1}"
+   while [ $# -gt 0 ] ; do
+     case "${OPTION,,}" in
+       --xml-only)  ENCODING_XML=0
+                    ENCODING_JSON=1
+                    ;;
+       --json-only) ENCODING_JSON=0
+                    ENCODING_XML=1
+               ;;
+     esac
+     shift
+     OPTION=$1
+   done
+ fi
+ mk_tmp_file HTTP_RESPONSE
+ http_curl "${HTTP_RESPONSE}" "${HTTP_METHOD}" "${HTTP_PATH}" "${HTTP_BODY}" "${HTTP_CONTENT_TYPE}" "${HTTP_ACCEPT}"
+ if [ ${CURL_RETVAL} -eq 0 ] ; then
+   if [ "${CURL_HTTP_CODE:0:1}" == "2" ] ; then
+      if [ -f "${HTTP_RESPONSE}" ] ; then
+        STREAMS=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream | length" ${HTTP_RESPONSE})
+        if [ ${STREAMS} -gt 0 ] ; then
+          local STREAM=0
+          if [[ ${ENCODING_JSON} -eq 0 && ${ENCODING_XML} -eq 0 ]] ; then
+#            echo "[]short-name|name|replay-support|encoding|url"
+             echo "[]short-name|replay-support|encoding"
+          else
+#            echo "[]short-name|name|replay-support|url"
+             echo "[]short-name|replay-support"
+          fi
+          while [ ${STREAM} -lt ${STREAMS} ] ; do
+           local SHORT_NAME=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream[${STREAM}].name" ${HTTP_RESPONSE})
+           local REPLAY_SUPPORT=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream[${STREAM}].\"replay-support\"" ${HTTP_RESPONSE})
+           local ACCESSES=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream[${STREAM}].access | length" ${HTTP_RESPONSE})
+           local ACCESS=0
+           while [ ${ACCESS} -lt ${ACCESSES} ] ; do
+             local ENCODING=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream[${STREAM}].access[${ACCESS}].encoding" ${HTTP_RESPONSE})
+             local URL=$(jq -r ".\"ietf-restconf-monitoring:streams\".stream[${STREAM}].access[${ACCESS}].location" ${HTTP_RESPONSE})
+             local TMP_URL="${URL#*$STREAMS_PREFIX}"
+             local NAME="${TMP_URL%$STREAM_JSON_SUFFIX*}"
+             if [[ ${ENCODING_JSON} -eq 0 && ${ENCODING_XML} -eq 0 ]] ; then
+#               echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${ENCODING,,}|${URL}"
+               echo "${SHORT_NAME}|${REPLAY_SUPPORT}|${ENCODING,,}"
+             else
+#               [[ ${ENCODING_JSON} -eq 0 && "${ENCODING,,}" == "json" ]] && echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${URL}"
+               [[ ${ENCODING_JSON} -eq 0 && "${ENCODING,,}" == "json" ]] && echo "${SHORT_NAME}|${REPLAY_SUPPORT}"
+#               [[ ${ENCODING_XML} -eq 0 && "${ENCODING,,}" == "xml" ]] && echo "${SHORT_NAME}|${NAME}|${REPLAY_SUPPORT}|${URL}"
+               [[ ${ENCODING_XML} -eq 0 && "${ENCODING,,}" == "xml" ]] && echo "${SHORT_NAME}|${REPLAY_SUPPORT}"
+             fi
+             ((ACCESS=ACCESS+1))
+           done
+           ((STREAM=STREAM+1))
+          done
+        fi
+      fi
+   else
+    RETVAL=${CURL_RETVAL}
+   fi
+ else
+   RETVAL=${CURL_RETVAL}
+ fi
+ rm_tmp_file "${HTTP_RESPONSE}"
+ return ${RETVAL}
+}
+
+if [ $# -eq 0 ] ; then
+  streams_help_list
+  RETVAL=0
+else
+ case "${1,,}" in
+  help|?)
+    streams_help_list
+    RETVAL=0
+    ;;
+  bootstrap)
+    shift
+    streams_bootstrap "${@}"
+    RETVAL=$?
+    ;;
+  list)
+    shift
+    streams_list "${@}"
+    RETVAL=$?
+    ;;
+  monitor)
+    shift
+    stream_monitor "${@}"
+    RETVAL=$?
+    ;;
+  *)
+    streams_help_list
+    RETVAL=1
+    ;;
+ esac
+fi
+return ${RETVAL}

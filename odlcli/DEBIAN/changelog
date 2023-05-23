@@ -1,0 +1,15 @@
+odlcli (1.0.0-0) UNRELEASED; urgency=low
+
+ * Initial release - LSC 12.1/OpenDaylight Sodium RFC8040 compatibility
+
+ -- Lee Cowdrey <lee@cowdrey.net> Fri, 25 Sep 2020 15:00:00
+
+ * Maintenance - adjustable RESTCONF path prefix
+
+ -- Lee Cowdrey <lee@cowdrey.net> Sun, 16 May 2021 23:00:00
+
+ 
+ * Maintenance - adjustable RESTCONF path prefix
+
+ -- Lee Cowdrey <lee@cowdrey.net> Tue, 14 June 2022 15:00:00
+
